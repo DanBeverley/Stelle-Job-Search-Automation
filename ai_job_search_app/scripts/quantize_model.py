@@ -11,7 +11,7 @@ def main():
         MODEL_PATH = 'ai_job_search_app/data/models/bert_resume_classifier'
         QUANTIZED_MODEL_PATH = 'ai_job_search_app/data/models/bert_resume_classifier_quantized'
         DEVICE = torch.device("cpu")
-        NUM_LABELS = 48 # As determined from our datasets
+        NUM_LABELS = 48 
 
     config = QuantizationConfig()
     config_file_path = os.path.join(config.MODEL_PATH, 'config.json')

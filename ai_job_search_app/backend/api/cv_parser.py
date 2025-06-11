@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from .. import schemas
-from ..security import get_current_user
+from .auth import get_current_active_user
 from ..services.ml_service import ml_service
 import pypdf
 import docx
@@ -34,7 +34,7 @@ def extract_text_from_docx(file_stream: io.BytesIO) -> str:
 @router.post("/parse-cv", response_model=schemas.CVParsingResult)
 async def parse_cv(
     file: UploadFile = File(...),
-    current_user: schemas.User = Depends(get_current_user)
+    current_user: schemas.User = Depends(get_current_active_user)
 ):
     """
     Uploads and parses a CV (PDF or DOCX) to predict its category.
