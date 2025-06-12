@@ -2,9 +2,6 @@ import os
 import base64
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
-from dotenv import load_dotenv
-
-load_dotenv()
 
 # It's crucial to set this environment variable in deployment environment.
 # For local development,  add it to a .env file.
