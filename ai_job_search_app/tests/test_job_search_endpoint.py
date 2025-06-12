@@ -17,33 +17,22 @@ JOB_SEARCH_ENDPOINT = "/jobs/search"
 LOGIN_ENDPOINT = "/auth/login"
 
 # --- User Credentials & Search ---
-# !! IMPORTANT !!
-# 1. First, run your FastAPI server.
+# 1. First, run FastAPI server.
 # 2. Use these credentials with the /docs UI to log in and get a token.
-# 3. Paste the access token you receive into the `YOUR_ACCESS_TOKEN` variable below.
+# 3. Paste the access token receive into the `YOUR_ACCESS_TOKEN` variable below.
 USER_EMAIL = "test@example.com"  # Use an email you registered with
 USER_PASSWORD = "password"       # Use the corresponding password
 
-# This is a temporary addition to generate a token for testing
-def get_test_token():
-    # Create a dummy user object for token creation
-    # In a real app, this user would come from your database
-    fake_user = {"username": "testuser", "email": "test@example.com"}
-    access_token_expires = timedelta(minutes=30)
-    # The create_access_token function will now use the SECRET_KEY from the .env file
-    access_token = create_access_token(
-        data={"sub": fake_user["username"]}, expires_delta=access_token_expires
-    )
-    return access_token
+# The temporary token generation is no longer needed.
+# def get_test_token():
+#     ...
 
 # --- !! PASTE YOUR TOKEN HERE !! ---
-YOUR_ACCESS_TOKEN = get_test_token()
+YOUR_ACCESS_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJob2E0MzQzQGdtYWlsLmNvbSIsImV4cCI6MTc0OTY5MTQzMX0.v1BoA57J3gu--buOyuXHJ44JcCSbk4vMuIfA3syBcik"
 # ------------------------------------
 
-# --- Search Parameters ---
 SEARCH_KEYWORD = "Software Engineer"
-SEARCH_LOCATION = "London" # Optional, can be removed to test auto-detection
-# -------------------------
+SEARCH_LOCATION = "London" 
 
 
 def test_job_search():
