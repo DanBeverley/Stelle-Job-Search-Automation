@@ -1,3 +1,8 @@
+from dotenv import load_dotenv
+
+# Load environment variables from .env file before any other imports
+load_dotenv()
+
 from fastapi import FastAPI
 from .api import auth, cv_parser, resume_builder, job_search, interview_prep
 from .models.db import user
