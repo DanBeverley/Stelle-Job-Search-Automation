@@ -48,3 +48,11 @@ class JobSearchResult(BaseModel):
 class CVParsingResult(BaseModel):
     filename: str
     predicted_category: str
+
+# Interview Prep Schemas
+class InterviewPrepRequest(BaseModel):
+    job_description: str
+    cv_text: Optional[str] = None # CV text can be passed directly or fetched for the user
+
+class InterviewQuestions(BaseModel):
+    questions: List[str]
