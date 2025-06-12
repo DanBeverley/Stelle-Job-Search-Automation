@@ -1,11 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
 
 from .. import schemas
 from ..models.db import user as user_model, crud
-from ..security import verify_password, create_access_token, SECRET_KEY, ALGORITHM, get_password_hash
+from ..security import (
+    verify_password, 
+    create_access_token, 
+    get_password_hash,
+    SECRET_KEY,
+    ALGORITHM
+)
 from ..models.db.database import get_db
 
 # Will create these files later
@@ -15,7 +21,11 @@ from ..models.db.database import get_db
 
 router = APIRouter()
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+# --- TEMPORARY HARDCODED SECRET FOR DEBUGGING ---
+# ------------------------------------------------
+
+# This is the correct scheme for a simple "Bearer" token in the header.
+oauth2_scheme = HTTPBearer(scheme_name="Bearer")
 
 @router.post("/register", response_model=schemas.User)
 def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
@@ -41,7 +51,8 @@ def login(db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = 
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
-def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)):
+def get_current_user(db: Session = Depends(get_db), credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme)):
+    token = credentials.credentials
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
