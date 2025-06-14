@@ -49,6 +49,24 @@ class CVParsingResult(BaseModel):
     filename: str
     predicted_category: str
 
+class Education(BaseModel):
+    institution: Optional[str] = None
+    degree: Optional[str] = None
+    years: Optional[str] = None
+
+class Experience(BaseModel):
+    company: Optional[str] = None
+    role: Optional[str] = None
+    period: Optional[str] = None
+    description: Optional[str] = None
+
+class CVParsingDetailsResult(BaseModel):
+    filename: str
+    summary: Optional[str] = None
+    skills: List[str] = []
+    educations: List[Education] = []
+    experiences: List[Experience] = []
+
 # Interview Prep Schemas
 class InterviewPrepRequest(BaseModel):
     job_description: str
