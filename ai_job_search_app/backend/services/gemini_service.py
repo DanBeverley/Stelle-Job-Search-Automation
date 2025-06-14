@@ -67,4 +67,73 @@ def generate_interview_questions_with_gemini(job_description: str, cv_text: str 
     except Exception as e:
         print(f"An error occurred while calling the Gemini API: {e}")
         # In case of any error (API, parsing, etc.), return a helpful error message.
-        return [f"Failed to generate questions due to an API error: {e}"] 
+        return [f"Failed to generate questions due to an API error: {e}"]
+
+def parse_cv_with_gemini(cv_text: str) -> dict:
+    """
+    Uses the Gemini API to parse a CV and extract structured information.
+
+    Args:
+        cv_text: The full text of the user's CV.
+
+    Returns:
+        A dictionary containing the parsed CV data.
+    """
+    prompt = f"""
+    Act as an expert CV parser and data extractor. Your task is to analyze the provided CV text and extract the following information in a structured JSON format:
+    - summary: A brief 2-3 sentence professional summary of the candidate.
+    - skills: A list of key technical and soft skills.
+    - educations: A list of educational qualifications, including 'institution', 'degree', and 'years'.
+    - experiences: A list of professional experiences, including 'company', 'role', 'period', and a brief 'description' of responsibilities.
+
+    Please provide the output as a single JSON object. Do not include any explanatory text before or after the JSON.
+
+    Example format:
+    {{
+        "summary": "A highly motivated software engineer with 5 years of experience...",
+        "skills": ["Python", "FastAPI", "React", "AWS"],
+        "educations": [
+            {{"institution": "University of Technology", "degree": "B.S. in Computer Science", "years": "2015-2019"}}
+        ],
+        "experiences": [
+            {{
+                "company": "Tech Solutions Inc.",
+                "role": "Software Engineer",
+                "period": "2019-Present",
+                "description": "Developed and maintained web applications using Python and FastAPI."
+            }}
+        ]
+    }}
+
+    ---
+    CV TEXT:
+    {cv_text}
+    ---
+    PARSED JSON OUTPUT:
+    """
+
+    try:
+        response = model.generate_content(prompt)
+        response_text = response.text.strip()
+        
+        # The model should return a JSON string. We'll clean it up and parse it.
+        # It often includes ```json ... ``` which we need to remove.
+        if response_text.startswith("```json"):
+            response_text = response_text[7:]
+        if response_text.endswith("```"):
+            response_text = response_text[:-3]
+            
+        response_text = response_text.strip()
+        
+        # Safely evaluate the string to a Python dict
+        parsed_data = ast.literal_eval(response_text)
+        
+        return parsed_data
+
+    except (ValueError, SyntaxError) as e:
+        print(f"Error parsing Gemini response: {e}")
+        print(f"Raw response was: {response.text}")
+        raise ValueError("Failed to parse CV data from the model's response.")
+    except Exception as e:
+        print(f"An error occurred while calling the Gemini API: {e}")
+        raise IOError("An error occurred while communicating with the Gemini API.") 
