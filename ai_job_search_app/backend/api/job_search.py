@@ -45,9 +45,9 @@ def search_jobs(
                 final_location = f"{geo_location['city']}, {geo_location['country']}"
                 # 2. Update user profile with the new location
                 if db_user:
-                    db_user.city = geo_location['city']
-                    db_user.country = geo_location['country']
-                    db.commit()
+                db_user.city = geo_location['city']
+                db_user.country = geo_location['country']
+                db.commit()
     print(f"[DEBUG] Final location determined: {final_location}")
 
     if not final_location:
@@ -60,7 +60,7 @@ def search_jobs(
     # 3. Call job provider services
     try:
         print("[DEBUG] Calling Adzuna API...")
-        adzuna_jobs_raw = adzuna_api.search_adzuna_jobs(keyword, final_location)
+    adzuna_jobs_raw = adzuna_api.search_adzuna_jobs(keyword, final_location)
         print("[DEBUG] Adzuna API call successful.")
     except Exception as e:
         print(f"[DEBUG] Adzuna API call failed: {e}")
@@ -68,7 +68,7 @@ def search_jobs(
 
     try:
         print("[DEBUG] Calling TheirStack API...")
-        theirstack_jobs_raw = theirstack_api.search_theirstack_jobs(keyword, final_location)
+    theirstack_jobs_raw = theirstack_api.search_theirstack_jobs(keyword, final_location)
         print("[DEBUG] TheirStack API call successful.")
     except Exception as e:
         print(f"[DEBUG] TheirStack API call failed: {e}")
