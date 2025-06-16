@@ -17,7 +17,7 @@ async def get_interview_questions(
     if not request.job_description:
         raise HTTPException(status_code=400, detail="Job description cannot be empty.")
     
-    # In a future version, we would fetch the user's latest parsed CV from the DB
+    # In a future version, would fetch the user's latest parsed CV from the DB
     # if request.cv_text is not provided.
     cv_text = request.cv_text or "" # Pass an empty string if CV is not provided
     
