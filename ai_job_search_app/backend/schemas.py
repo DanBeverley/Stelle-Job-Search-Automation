@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 
 # Resume Schemas
@@ -74,3 +74,19 @@ class InterviewPrepRequest(BaseModel):
 
 class InterviewQuestions(BaseModel):
     questions: List[str]
+
+class SalaryPredictionRequest(BaseModel):
+    job_title: str = Field(..., example="Software Developer")
+    location: str = Field(..., example="California")
+    skills: List[str] = Field(..., example=["Python", "FastAPI", "AWS"])
+    experience: List[dict] = Field(..., example=[{"company": "Tech Inc.", "role": "Senior Developer", "period": "2018-2022"}])
+    education: List[dict] = Field(..., example=[{"institution": "State University", "degree": "B.S. Computer Science", "years": "2014-2018"}])
+
+class SalaryPredictionResponse(BaseModel):
+    min_salary: int
+    max_salary: int
+    median_salary: int
+    commentary: str
+    currency: str = Field(..., example="USD")
+    period: str = Field(..., example="annual")
+    error: Optional[str] = None
