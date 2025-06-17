@@ -29,6 +29,7 @@ class User(UserBase):
     encrypted_resume_data: Optional[str] = None
     city: Optional[str] = None
     country: Optional[str] = None
+    parsed_cv_data: Optional[Dict[str, Any]] = None
 
     class Config:
         from_attributes = True
@@ -90,3 +91,28 @@ class SalaryPredictionResponse(BaseModel):
     currency: str = Field(..., example="USD")
     period: str = Field(..., example="annual")
     error: Optional[str] = None
+
+# Application Tracker Schemas
+class ApplicationBase(BaseModel):
+    job_title: str
+    company: str
+    status: str = Field(..., example="Applied")
+    date_applied: str # Consider using datetime in the future
+    notes: Optional[str] = None
+
+class ApplicationCreate(ApplicationBase):
+    pass
+
+class ApplicationUpdate(BaseModel):
+    job_title: Optional[str] = None
+    company: Optional[str] = None
+    status: Optional[str] = None
+    date_applied: Optional[str] = None
+    notes: Optional[str] = None
+
+class Application(ApplicationBase):
+    id: int
+    user_id: int
+
+    class Config:
+        from_attributes = True
