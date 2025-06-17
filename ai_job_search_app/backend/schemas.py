@@ -99,6 +99,7 @@ class ApplicationBase(BaseModel):
     status: str = Field(..., example="Applied")
     date_applied: str # Consider using datetime in the future
     notes: Optional[str] = None
+    cover_letter_text: Optional[str] = None
 
 class ApplicationCreate(ApplicationBase):
     pass
@@ -109,6 +110,7 @@ class ApplicationUpdate(BaseModel):
     status: Optional[str] = None
     date_applied: Optional[str] = None
     notes: Optional[str] = None
+    cover_letter_text: Optional[str] = None
 
 class Application(ApplicationBase):
     id: int
@@ -116,3 +118,13 @@ class Application(ApplicationBase):
 
     class Config:
         from_attributes = True
+
+# Cover Letter Schemas
+class CoverLetterRequest(BaseModel):
+    job_title: str
+    company: str
+    job_description: str
+
+class CoverLetterResponse(BaseModel):
+    cover_letter_text: str
+    prompt_used: str # For debugging and verification

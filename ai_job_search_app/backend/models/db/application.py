@@ -11,6 +11,7 @@ class Application(Base):
     status = Column(String, default="Applied")
     date_applied = Column(String)
     notes = Column(Text, nullable=True)
+    cover_letter_text = Column(Text, nullable=True)
     
     user_id = Column(Integer, ForeignKey("users.id"))
     owner = relationship("User", back_populates="applications") 
