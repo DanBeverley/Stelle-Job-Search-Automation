@@ -14,17 +14,27 @@ def generate_cover_letter(
     current_user: schemas.User = Depends(get_current_active_user)
 ):
     """
-    Generates a cover letter for a specific job application using the user's
-    stored CV data. This is currently a placeholder and will be connected
-    to a fine-tuned model in the future.
+    Generates a cover letter for a specific job application using a fine-tuned
+    generative model based on the user's stored CV data.
     """
-    if not current_user.parsed_cv_data:
+    try:
+        response = cover_letter_service.generate_cover_letter_with_finetuned_model(
+            user=current_user, request=request
+        )
+        return response
+    except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No CV data found for this user. Please upload and parse a CV first."
+            detail=str(e)
         )
-
-    response = cover_letter_service.generate_cover_letter_placeholder(
-        user=current_user, request=request
-    )
-    return response 
+    except RuntimeError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e)
+        )
+    except Exception as e:
+        # Generic error handler for any other unexpected errors
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {e}"
+        ) 
