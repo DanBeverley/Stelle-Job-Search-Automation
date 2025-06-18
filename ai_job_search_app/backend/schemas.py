@@ -71,10 +71,12 @@ class CVParsingDetailsResult(BaseModel):
 # Interview Prep Schemas
 class InterviewPrepRequest(BaseModel):
     job_description: str
-    cv_text: Optional[str] = None # CV text can be passed directly or fetched for the user
 
 class InterviewQuestions(BaseModel):
     questions: List[str]
+
+class STAResponse(BaseModel):
+    feedback: str
 
 class SalaryPredictionRequest(BaseModel):
     job_title: str = Field(..., example="Software Developer")
