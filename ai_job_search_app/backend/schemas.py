@@ -29,6 +29,7 @@ class User(UserBase):
     encrypted_resume_data: Optional[str] = None
     city: Optional[str] = None
     country: Optional[str] = None
+    parsed_cv_data: Optional[Dict[str, Any]] = None
 
     class Config:
         from_attributes = True
@@ -70,10 +71,12 @@ class CVParsingDetailsResult(BaseModel):
 # Interview Prep Schemas
 class InterviewPrepRequest(BaseModel):
     job_description: str
-    cv_text: Optional[str] = None # CV text can be passed directly or fetched for the user
 
 class InterviewQuestions(BaseModel):
     questions: List[str]
+
+class STAResponse(BaseModel):
+    feedback: str
 
 class SalaryPredictionRequest(BaseModel):
     job_title: str = Field(..., example="Software Developer")
@@ -90,3 +93,40 @@ class SalaryPredictionResponse(BaseModel):
     currency: str = Field(..., example="USD")
     period: str = Field(..., example="annual")
     error: Optional[str] = None
+
+# Application Tracker Schemas
+class ApplicationBase(BaseModel):
+    job_title: str
+    company: str
+    status: str = Field(..., example="Applied")
+    date_applied: str # Consider using datetime in the future
+    notes: Optional[str] = None
+    cover_letter_text: Optional[str] = None
+
+class ApplicationCreate(ApplicationBase):
+    pass
+
+class ApplicationUpdate(BaseModel):
+    job_title: Optional[str] = None
+    company: Optional[str] = None
+    status: Optional[str] = None
+    date_applied: Optional[str] = None
+    notes: Optional[str] = None
+    cover_letter_text: Optional[str] = None
+
+class Application(ApplicationBase):
+    id: int
+    user_id: int
+
+    class Config:
+        from_attributes = True
+
+# Cover Letter Schemas
+class CoverLetterRequest(BaseModel):
+    job_title: str
+    company: str
+    job_description: str
+
+class CoverLetterResponse(BaseModel):
+    cover_letter_text: str
+    prompt_used: str # For debugging and verification

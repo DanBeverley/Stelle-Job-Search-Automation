@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status
 from logging import getLogger
+from sqlalchemy.orm import Session
 from .. import schemas
+from ..models.db.database import get_db
 from .auth import get_current_active_user
 from ..services.gemini_service import parse_cv_from_image, parse_cv_from_text
 from ..utils.cv_utils import extract_text_from_pdf, extract_text_from_docx
@@ -9,17 +11,19 @@ import io
 logger = getLogger(__name__)
 router = APIRouter()
 
-@router.post("/parse", response_model=schemas.CVParsingDetailsResult, summary="Parse a CV to extract structured data")
+@router.post("/parse", response_model=schemas.CVParsingDetailsResult, summary="Parse a CV and save to user profile")
 async def parse_cv(
     file: UploadFile = File(...),
-    # current_user: schemas.User = Depends(get_current_active_user) # Temporarily disabled for easier testing
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(get_current_active_user)
 ):
     """
-    Uploads and parses a CV file (PDF, DOCX, PNG, JPG) and returns structured data.
+    Uploads a CV file, parses it to extract structured data,
+    and saves the result to the current user's profile.
     """
     contents = await file.read()
     content_type = file.content_type
-    logger.info(f"Received file '{file.filename}' with content type '{content_type}'")
+    logger.info(f"Received file '{file.filename}' for user '{current_user.email}'")
 
     try:
         if content_type.startswith("image/"):
@@ -45,6 +49,20 @@ async def parse_cv(
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to parse CV: Model returned no data."
+            )
+
+        # Save the parsed data to the user's profile in the database
+        try:
+            current_user.parsed_cv_data = parsed_data
+            db.commit()
+            db.refresh(current_user)
+            logger.info(f"Successfully saved parsed CV data for user '{current_user.email}'")
+        except Exception as db_error:
+            logger.error(f"Database error saving parsed CV data for user '{current_user.email}': {db_error}")
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to save parsed CV data to user profile."
             )
 
         # Add filename to the response
