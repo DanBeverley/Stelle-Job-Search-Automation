@@ -130,3 +130,18 @@ class CoverLetterRequest(BaseModel):
 class CoverLetterResponse(BaseModel):
     cover_letter_text: str
     prompt_used: str # For debugging and verification
+
+# Added skill gap analysis schemas
+
+class Course(BaseModel):
+    title: str
+    url: str
+    organization: str
+
+class SkillAnalysisRequest(BaseModel):
+    job_description: str
+
+class SkillAnalysisResponse(BaseModel):
+    matched_skills: List[str]
+    missing_skills: List[str]
+    recommended_courses: List[Course]
