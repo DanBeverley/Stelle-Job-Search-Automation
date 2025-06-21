@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI
-from .api import auth, cv_parser, resume_builder, job_search, interview_prep, salary_prediction, application, cover_letter
+from .api import auth, cv_parser, resume_builder, job_search, interview_prep, salary_prediction, application, cover_letter, skill_analysis
 from .models.db.database import engine, Base
 from .models.db import user as user_model
 from .models.db import application as application_model
@@ -17,8 +17,9 @@ app.include_router(cover_letter.router, prefix="/api/cover-letter", tags=["Cover
 app.include_router(cv_parser.router, prefix="/api/cv", tags=["CV Parser"])
 app.include_router(resume_builder.router, prefix="/api/resume", tags=["Resume Builder"])
 app.include_router(job_search.router, prefix="/api/jobs", tags=["Job Search"])
-app.include_router(interview_prep.router, prefix="/api/interview", tags=["Interview Prep"])
+app.include_router(interview_prep.router, prefix="/api/interview", tags=["Interview Preparation"])
 app.include_router(salary_prediction.router, prefix="/api/salary", tags=["Salary Prediction"])
+app.include_router(skill_analysis.router, prefix="/api/skills", tags=["Skill Analysis"])
 
 @app.on_event("startup")
 def on_startup():
