@@ -10,11 +10,21 @@ from datasets import load_dataset
 import joblib
 import os
 import numpy as np
+import argparse
 
 def main():
+    parser = argparse.ArgumentParser(description="Train a salary prediction model.")
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        default="ai_job_search_app/data/models/salary_predictor",
+        help="The directory to save the trained model and preprocessor."
+    )
+    args = parser.parse_args()
+
     # --- 1. Configuration ---
     DATASET_NAME = "aravind-g/job-salary-prediction"
-    MODEL_DIR = "ai_job_search_app/data/models/salary_predictor"
+    MODEL_DIR = args.output_dir
     MODEL_FILE = os.path.join(MODEL_DIR, "xgb_salary_model.json")
     PREPROCESSOR_FILE = os.path.join(MODEL_DIR, "preprocessor.joblib")
 
