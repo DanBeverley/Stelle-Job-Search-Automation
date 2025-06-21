@@ -56,7 +56,7 @@ Generate a professional cover letter based on the following job details and cand
 <start_of_turn>model
 {data_point.get('Cover Letter', 'N/A')}<end_of_turn>"""
 
-def train_cover_letter_model():
+def train_cover_letter_model(output_dir):
     """Fine-tunes the cover letter generation model with optimization techniques."""
     MODEL_ID = "google/gemma-2b-it"
     CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
@@ -72,7 +72,6 @@ def train_cover_letter_model():
     model = prepare_model_for_kbit_training(model)
     model = get_peft_model(model, lora_config)
 
-    output_dir = "./Models/gemma-cover-letter-generator"
     training_args = TrainingArguments(
         output_dir=output_dir,
         per_device_train_batch_size=2,
@@ -88,6 +87,7 @@ def train_cover_letter_model():
         report_to="none",
         fp16=True,
         weight_decay=0.01,           # L2 Regularization
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=3)]
     )
 
     trainer = SFTTrainer(
@@ -101,12 +101,11 @@ def train_cover_letter_model():
         packing=True,
         max_seq_length=1024,
         formatting_func=format_cover_letter_prompt,
-        callbacks=[EarlyStoppingCallback(early_stopping_patience=3)]
     )
 
     trainer.train()
     trainer.save_model(f"{output_dir}/final_model")
-    print("Cover letter model fine-tuning complete.")
+    print(f"Cover letter model fine-tuning complete. Model saved to {output_dir}/final_model")
 
 # --- Interview Question Model ---
 
@@ -138,7 +137,7 @@ Generate an interview question for the following candidate and job role.
 ### INTERVIEW QUESTION:
 {question}"""
 
-def train_interview_model():
+def train_interview_model(output_dir):
     """Fine-tunes the interview question generation model with optimization techniques."""
     MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.2"
 
@@ -154,7 +153,6 @@ def train_interview_model():
     model = prepare_model_for_kbit_training(model)
     model = get_peft_model(model, lora_config)
 
-    output_dir = "./final_interview_model"
     training_args = TrainingArguments(
         output_dir=output_dir,
         per_device_train_batch_size=2, # Reduced for stability
@@ -185,7 +183,7 @@ def train_interview_model():
     
     trainer.train()
     trainer.save_model(output_dir)
-    print("Interview model fine-tuning complete.")
+    print(f"Interview model fine-tuning complete. Model saved to {output_dir}")
 
 
 # --- Main Execution ---
@@ -199,14 +197,20 @@ def main():
         choices=["cover_letter", "interview"],
         help="The type of model to fine-tune."
     )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        required=True,
+        help="The directory to save the fine-tuned model."
+    )
     args = parser.parse_args()
 
     if args.model_type == "cover_letter":
         print("--- Starting Cover Letter Model Fine-Tuning ---")
-        train_cover_letter_model()
+        train_cover_letter_model(args.output_dir)
     elif args.model_type == "interview":
         print("--- Starting Interview Model Fine-Tuning ---")
-        train_interview_model()
+        train_interview_model(args.output_dir)
     else:
         print("Invalid model type specified.")
 
