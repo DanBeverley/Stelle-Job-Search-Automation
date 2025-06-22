@@ -23,7 +23,7 @@ def main():
     args = parser.parse_args()
 
     # --- 1. Configuration ---
-    DATASET_NAME = "mathew/job-posting-and-salary-prediction"
+    DATASET_NAME = "sahirmaharaj/job-postings-from-google"
     MODEL_DIR = args.output_dir
     MODEL_FILE = os.path.join(MODEL_DIR, "salary_predictor_xgboost.json")
     PREPROCESSOR_FILE = os.path.join(MODEL_DIR, "salary_predictor_preprocessor.joblib")

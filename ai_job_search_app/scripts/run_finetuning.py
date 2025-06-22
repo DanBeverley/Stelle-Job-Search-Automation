@@ -111,24 +111,26 @@ def train_cover_letter_model(output_dir):
 
 def prepare_interview_data(dataset_name):
     """Loads and prepares the interview question dataset, splitting it."""
+    # This dataset has a specific structure we can leverage
     dataset = load_dataset(dataset_name, split="train")
     dataset = dataset.shuffle(seed=42)
-    # Using a subset for demo and splitting it
-    split_dataset = dataset.select(range(2000)).train_test_split(test_size=0.2)
-    return split_dataset['train'].map(lambda x: {"text": format_interview_prompt(x)}), \
-           split_dataset['test'].map(lambda x: {"text": format_interview_prompt(x)})
+    # Using the full dataset as it's well-formatted, and splitting it
+    split_dataset = dataset.train_test_split(test_size=0.2)
+    return split_dataset['train'].map(format_interview_prompt), \
+           split_dataset['test'].map(format_interview_prompt)
 
 
 def format_interview_prompt(data_point):
-    """Formats the prompt for the interview question model."""
-    job_title = data_point['category']
-    question = data_point['question']
-    skills = ["teamwork", "problem-solving", job_title.lower().replace("_", " ")]
-    experience = "previous projects in a similar domain"
-    job_description = f"Seeking a {job_title} with experience in {', '.join(skills)}."
-    cv_summary = f"Candidate has skills in {', '.join(skills)} and experience in {experience}."
+    """Formats the prompt for the interview question model using the new dataset structure."""
+    # The dataset contains a 'prompt' with the job description and a 'completion' with the question.
+    job_description = data_point['prompt'] # This field contains the job description
+    question = data_point['completion']   # This field contains the corresponding question
 
-    return f"""### INSTRUCTION:
+    # We can create a simple CV summary as the dataset doesn't provide one.
+    cv_summary = "Candidate with relevant skills and experience."
+
+    # The final prompt structure should still match what the model expects
+    formatted_prompt = f"""### INSTRUCTION:
 Generate an interview question for the following candidate and job role.
 ### JOB DESCRIPTION:
 {job_description}
@@ -136,12 +138,13 @@ Generate an interview question for the following candidate and job role.
 {cv_summary}
 ### INTERVIEW QUESTION:
 {question}"""
+    return {"text": formatted_prompt}
 
 def train_interview_model(output_dir):
     """Fine-tunes the interview question generation model with optimization techniques."""
     MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.2"
 
-    train_dataset, eval_dataset = prepare_interview_data("jacob-hugging-face/job-interview-question-dataset")
+    train_dataset, eval_dataset = prepare_interview_data("ought/raft-job-interview-training-data")
     
     bnb_config = get_quantization_config()
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, trust_remote_code=True)
