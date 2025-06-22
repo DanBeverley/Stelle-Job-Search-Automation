@@ -11,7 +11,7 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     encrypted_resume_data = Column(Text, nullable=True)
     city = Column(String, nullable=True)
-    country = Column(String, nullable=True)
+    country = Column(String, nullable=True) 
     parsed_cv_data = Column(JSON, nullable=True)
 
     applications = relationship("Application", back_populates="owner") 

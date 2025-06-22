@@ -25,8 +25,8 @@ def main():
     # --- 1. Configuration ---
     DATASET_NAME = "aravind-g/job-salary-prediction"
     MODEL_DIR = args.output_dir
-    MODEL_FILE = os.path.join(MODEL_DIR, "xgb_salary_model.json")
-    PREPROCESSOR_FILE = os.path.join(MODEL_DIR, "preprocessor.joblib")
+    MODEL_FILE = os.path.join(MODEL_DIR, "salary_predictor_xgboost.json")
+    PREPROCESSOR_FILE = os.path.join(MODEL_DIR, "salary_predictor_preprocessor.joblib")
 
     # Create directory if it doesn't exist
     os.makedirs(MODEL_DIR, exist_ok=True)

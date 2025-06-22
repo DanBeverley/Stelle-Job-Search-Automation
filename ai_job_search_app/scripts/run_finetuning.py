@@ -104,8 +104,8 @@ def train_cover_letter_model(output_dir):
     )
 
     trainer.train()
-    trainer.save_model(f"{output_dir}/final_model")
-    print(f"Cover letter model fine-tuning complete. Model saved to {output_dir}/final_model")
+    trainer.save_model(output_dir)
+    print(f"Cover letter model fine-tuning complete. Model saved to {output_dir}")
 
 # --- Interview Question Model ---
 
