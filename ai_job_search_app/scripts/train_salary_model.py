@@ -23,7 +23,7 @@ def main():
     args = parser.parse_args()
 
     # --- 1. Configuration ---
-    DATASET_NAME = "aravind-g/job-salary-prediction"
+    DATASET_NAME = "mathew/job-posting-and-salary-prediction"
     MODEL_DIR = args.output_dir
     MODEL_FILE = os.path.join(MODEL_DIR, "salary_predictor_xgboost.json")
     PREPROCESSOR_FILE = os.path.join(MODEL_DIR, "salary_predictor_preprocessor.joblib")
@@ -38,34 +38,30 @@ def main():
 
     # --- 3. Initial Data Cleaning and Preparation ---
     print("Cleaning and preparing data...")
-    # Drop rows with missing salary or crucial features
-    df.dropna(subset=['Salary.Min', 'Salary.Max', 'Job.Description', 'Location'], inplace=True)
+    # Adjusting column names for the new dataset
+    df.dropna(subset=['salary_min', 'salary_max', 'description', 'location'], inplace=True)
     
-    # Create a single salary target by averaging Min and Max
-    df['Salary.Avg'] = (df['Salary.Min'] + df['Salary.Max']) / 2
-    # For simplicity, we'll predict the average. We could also predict a range.
+    df['Salary.Avg'] = (df['salary_min'] + df['salary_max']) / 2
     
-    # Handle categorical features with many unique values by taking the top N
-    top_locations = df['Location'].value_counts().nlargest(20).index
-    df['Location'] = df['Location'].where(df['Location'].isin(top_locations), 'Other')
+    top_locations = df['location'].value_counts().nlargest(20).index
+    df['Location'] = df['location'].where(df['location'].isin(top_locations), 'Other')
 
-    top_titles = df['Job.Title'].value_counts().nlargest(50).index
-    df['Job.Title'] = df['Job.Title'].where(df['Job.Title'].isin(top_titles), 'Other')
+    top_titles = df['title'].value_counts().nlargest(50).index
+    df['Job.Title'] = df['title'].where(df['title'].isin(top_titles), 'Other')
 
-    # Define features and target
-    X = df[['Job.Title', 'Location', 'Job.Description']]
+    # Define features and target using new column names
+    X = df[['Job.Title', 'Location', 'description']]
     y = df['Salary.Avg']
 
     # --- 4. Define Preprocessing Steps ---
     print("Defining preprocessing pipeline...")
-    # We create a column transformer to apply different transformations to different columns
     preprocessor = ColumnTransformer(
         transformers=[
             ('title_cat', OneHotEncoder(handle_unknown='ignore'), ['Job.Title']),
             ('location_cat', OneHotEncoder(handle_unknown='ignore'), ['Location']),
-            ('desc_tfidf', TfidfVectorizer(max_features=500, stop_words='english'), 'Job.Description')
+            ('desc_tfidf', TfidfVectorizer(max_features=500, stop_words='english'), 'description')
         ],
-        remainder='passthrough' # Keep other columns (if any)
+        remainder='passthrough'
     )
 
     # --- 5. Create the Full Model Pipeline ---
