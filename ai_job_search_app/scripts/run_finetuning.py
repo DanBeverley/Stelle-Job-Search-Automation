@@ -130,16 +130,21 @@ def train_cover_letter_model(output_dir):
 # --- Interview Question Model ---
 
 def prepare_interview_data(dataset_name):
-    """Creates a simple synthetic interview dataset for training."""
-    # Create synthetic interview data since the original dataset doesn't exist
+    """Creates a comprehensive synthetic interview dataset for training."""
+    # Create much more synthetic interview data to prevent packing errors
     synthetic_data = []
     
     job_descriptions = [
-        "Software Engineer position requiring Python, JavaScript, and React experience",
-        "Data Scientist role focusing on machine learning and statistical analysis",
-        "Product Manager position requiring stakeholder management and strategic planning",
-        "DevOps Engineer role with AWS, Docker, and Kubernetes experience",
-        "UX Designer position requiring user research and prototyping skills"
+        "Software Engineer position requiring Python, JavaScript, and React experience with 3+ years experience",
+        "Senior Data Scientist role focusing on machine learning, deep learning, and statistical analysis",
+        "Product Manager position requiring stakeholder management, strategic planning, and agile methodologies",
+        "DevOps Engineer role with AWS, Docker, Kubernetes, and CI/CD pipeline experience",
+        "UX Designer position requiring user research, prototyping, and design thinking skills",
+        "Full Stack Developer role with Node.js, Python, and database design experience",
+        "Machine Learning Engineer position requiring MLOps, model deployment, and cloud platforms",
+        "Frontend Developer role with React, Vue.js, and modern JavaScript frameworks",
+        "Backend Developer position requiring API design, microservices, and database optimization",
+        "Cloud Architect role with AWS/Azure expertise and infrastructure as code experience"
     ]
     
     interview_questions = [
@@ -147,41 +152,45 @@ def prepare_interview_data(dataset_name):
         "How do you approach problem-solving when faced with a complex technical issue?",
         "Describe a time when you had to work with a difficult team member.",
         "What motivates you in your work and how do you stay current with industry trends?",
-        "How do you prioritize tasks when managing multiple projects simultaneously?"
+        "How do you prioritize tasks when managing multiple projects simultaneously?",
+        "Explain a situation where you had to learn a new technology quickly.",
+        "Describe your experience with agile development methodologies.",
+        "How do you handle feedback and criticism of your work?",
+        "Tell me about a time you had to make a difficult technical decision.",
+        "What's your approach to code review and maintaining code quality?",
+        "How do you ensure your solutions are scalable and maintainable?",
+        "Describe a time when you had to debug a complex production issue.",
+        "How do you stay organized when working on multiple features?",
+        "Tell me about your experience with testing and quality assurance.",
+        "How do you approach documentation and knowledge sharing?"
     ]
     
+    # Generate many more combinations to ensure sufficient data
     for i, job_desc in enumerate(job_descriptions):
         for j, question in enumerate(interview_questions):
             synthetic_data.append({
-                "text": f"### JOB DESCRIPTION:\n{job_desc}\n### INTERVIEW QUESTION:\n{question}"
-            })
-    
-    # Create dataset
-    dataset = Dataset.from_list(synthetic_data)
-    dataset = dataset.shuffle(seed=42)
-    split_dataset = dataset.train_test_split(test_size=0.2)
-    return split_dataset['train'], split_dataset['test']
-
-
-def format_interview_prompt(data_point):
-    """Formats the prompt for the interview question model using the new dataset structure."""
-    # The dataset contains a 'prompt' with the job description and a 'completion' with the question.
-    job_description = data_point['prompt'] # This field contains the job description
-    question = data_point['completion']   # This field contains the corresponding question
-
-    # We can create a simple CV summary as the dataset doesn't provide one.
-    cv_summary = "Candidate with relevant skills and experience."
-
-    # The final prompt structure should still match what the model expects
-    formatted_prompt = f"""### INSTRUCTION:
+                "text": f"""### INSTRUCTION:
 Generate an interview question for the following candidate and job role.
 ### JOB DESCRIPTION:
-{job_description}
+{job_desc}
 ### CANDIDATE CV:
-{cv_summary}
+Experienced professional with relevant skills and background in the field.
 ### INTERVIEW QUESTION:
 {question}"""
-    return {"text": formatted_prompt}
+            })
+    
+    print(f"Generated {len(synthetic_data)} synthetic interview examples")
+    
+    # Create dataset with more examples
+    dataset = Dataset.from_list(synthetic_data)
+    dataset = dataset.shuffle(seed=42)
+    # Use 80/20 split to ensure both splits have enough examples
+    split_dataset = dataset.train_test_split(test_size=0.2)
+    
+    print(f"Training examples: {len(split_dataset['train'])}")
+    print(f"Evaluation examples: {len(split_dataset['test'])}")
+    
+    return split_dataset['train'], split_dataset['test']
 
 def train_interview_model(output_dir):
     """Fine-tunes the interview question generation model with state-of-the-art optimization techniques."""
@@ -267,15 +276,22 @@ def main():
         required=True,
         help="The directory to save the fine-tuned model."
     )
+    parser.add_argument(
+        "--hf_token",
+        type=str,
+        help="Hugging Face token for authentication (overrides environment variables)"
+    )
     args = parser.parse_args()
 
     # --- Hugging Face Login ---
-    # Check for the Hugging Face token as an environment variable.
-    # On Kaggle, this should be set in the "Secrets" section of your notebook.
-    hf_token = os.getenv("HF_TOKEN")
+    # Check for the Hugging Face token - prioritize command line argument
+    hf_token = args.hf_token
     if not hf_token:
-        # Try alternative environment variable names that Kaggle might use
-        hf_token = os.getenv("HUGGINGFACE_TOKEN") or os.getenv("HF_API_TOKEN")
+        # Try environment variables as fallback
+        hf_token = os.getenv("HF_TOKEN")
+        if not hf_token:
+            # Try alternative environment variable names that Kaggle might use
+            hf_token = os.getenv("HUGGINGFACE_TOKEN") or os.getenv("HF_API_TOKEN")
     
     if hf_token:
         print("Logging in to Hugging Face Hub...")
@@ -286,7 +302,7 @@ def main():
             print(f"Failed to authenticate: {e}")
     else:
         print("WARNING: No Hugging Face token found. Pre-trained model downloads may fail.")
-        print("Please ensure HF_TOKEN is set in Kaggle Secrets.")
+        print("Please provide HF_TOKEN via --hf_token argument or set in Kaggle Secrets.")
 
 
     if args.model_type == "cover_letter":
