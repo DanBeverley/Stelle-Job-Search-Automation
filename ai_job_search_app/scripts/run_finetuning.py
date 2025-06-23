@@ -67,7 +67,7 @@ Generate a professional cover letter based on the following job details and cand
 
 def train_cover_letter_model(output_dir):
     """Fine-tunes the cover letter generation model with state-of-the-art optimization techniques."""
-    MODEL_ID = "meta-llama/Llama-2-7b-chat-hf"  # State-of-the-art model
+    MODEL_ID = "Qwen/Qwen2.5-7B-Instruct"  # State-of-the-art model, no access required
     CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
 
     train_dataset, eval_dataset = prepare_cover_letter_data("ShashiVish/cover-letter-dataset", CACHE_DIR)
@@ -77,7 +77,7 @@ def train_cover_letter_model(output_dir):
     tokenizer.pad_token = tokenizer.eos_token
     model = AutoModelForCausalLM.from_pretrained(MODEL_ID, quantization_config=bnb_config, device_map="auto", cache_dir=CACHE_DIR)
 
-    # Llama-2 specific target modules for LoRA
+    # Qwen2.5 specific target modules for LoRA
     lora_config = get_lora_config(r=16, lora_alpha=32, target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"], lora_dropout=0.05)
     model = prepare_model_for_kbit_training(model)
     model = get_peft_model(model, lora_config)
