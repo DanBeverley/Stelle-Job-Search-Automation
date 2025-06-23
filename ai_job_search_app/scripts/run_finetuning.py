@@ -29,7 +29,9 @@ def get_quantization_config():
     return BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.bfloat16
+        bnb_4bit_compute_dtype=torch.bfloat16,
+        bnb_4bit_use_double_quant=True,  # More memory efficient
+        bnb_4bit_quant_storage=torch.uint8  # Reduce storage requirements
     )
 
 def get_lora_config(r, lora_alpha, target_modules, lora_dropout):
@@ -67,7 +69,7 @@ Generate a professional cover letter based on the following job details and cand
 
 def train_cover_letter_model(output_dir):
     """Fine-tunes the cover letter generation model with state-of-the-art optimization techniques."""
-    MODEL_ID = "Qwen/Qwen2.5-7B-Instruct"  # State-of-the-art model, no access required
+    MODEL_ID = "Qwen/Qwen2.5-3B-Instruct"  # Smaller model to fit in Kaggle's 16GB GPU
     CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
 
     train_dataset, eval_dataset = prepare_cover_letter_data("ShashiVish/cover-letter-dataset", CACHE_DIR)
@@ -84,25 +86,28 @@ def train_cover_letter_model(output_dir):
 
     training_args = TrainingArguments(
         output_dir=output_dir,
-        per_device_train_batch_size=1,  # Reduced for 7B model
-        gradient_accumulation_steps=8,  # Increased to maintain effective batch size
-        learning_rate=1e-4,  # Slightly lower for stability
-        num_train_epochs=3,
+        per_device_train_batch_size=1,  # Keep small for memory
+        per_device_eval_batch_size=1,   # Small eval batch size
+        gradient_accumulation_steps=8,  # Maintain effective batch size
+        learning_rate=1e-4,
+        num_train_epochs=2,  # Reduced epochs to prevent OOM
         logging_steps=10,
-        evaluation_strategy="steps",
+        eval_strategy="steps",  # Updated parameter name
         eval_steps=50,
         save_strategy="steps",
-        save_total_limit=2,
-        load_best_model_at_end=True,
-        metric_for_best_model="eval_loss",
-        greater_is_better=False,
+        save_total_limit=1,  # Keep only 1 checkpoint to save memory
+        load_best_model_at_end=False,  # Disable to save memory
         report_to="none",
         fp16=True,
         dataloader_pin_memory=False,
+        dataloader_num_workers=0,  # Reduce CPU memory usage
         weight_decay=0.01,
-        warmup_ratio=0.1,  # Warmup for better training
-        lr_scheduler_type="cosine",  # Cosine learning rate schedule
-        optim="adamw_torch"  # Optimized AdamW
+        warmup_ratio=0.1,
+        lr_scheduler_type="cosine",
+        optim="adamw_torch",
+        gradient_checkpointing=True,  # Trade compute for memory
+        remove_unused_columns=True,   # Remove unused data columns
+        max_grad_norm=1.0  # Gradient clipping
     )
 
     trainer = SFTTrainer(
@@ -114,7 +119,7 @@ def train_cover_letter_model(output_dir):
         dataset_text_field="Cover Letter",
         tokenizer=tokenizer,
         packing=True,
-        max_seq_length=1024,  # Restored for better quality
+        max_seq_length=512,  # Reduced to save memory
         formatting_func=format_cover_letter_prompt,
     )
 
@@ -180,7 +185,7 @@ Generate an interview question for the following candidate and job role.
 
 def train_interview_model(output_dir):
     """Fine-tunes the interview question generation model with state-of-the-art optimization techniques."""
-    MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.3"  # Latest Mistral model
+    MODEL_ID = "microsoft/DialoGPT-medium"  # Non-gated alternative that works well
 
     train_dataset, eval_dataset = prepare_interview_data("synthetic")
     
@@ -190,32 +195,35 @@ def train_interview_model(output_dir):
     model = AutoModelForCausalLM.from_pretrained(MODEL_ID, quantization_config=bnb_config, device_map="auto")
     model.config.use_cache = False
 
-    # Mistral specific target modules for LoRA
-    lora_config = get_lora_config(r=16, lora_alpha=32, target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"], lora_dropout=0.05)
+    # DialoGPT specific target modules for LoRA
+    lora_config = get_lora_config(r=16, lora_alpha=32, target_modules=["c_attn", "c_proj"], lora_dropout=0.05)
     model = prepare_model_for_kbit_training(model)
     model = get_peft_model(model, lora_config)
 
     training_args = TrainingArguments(
         output_dir=output_dir,
-        per_device_train_batch_size=1,  # Reduced for 7B model
-        gradient_accumulation_steps=8,  # Increased to maintain effective batch size
-        learning_rate=1e-4,  # Slightly lower for stability
+        per_device_train_batch_size=2,  # Can use larger batch for smaller model
+        per_device_eval_batch_size=2,
+        gradient_accumulation_steps=4,
+        learning_rate=1e-4,
         logging_steps=10,
-        max_steps=300,  # Increased for meaningful training
-        evaluation_strategy="steps",
+        max_steps=200,  # Reasonable training steps
+        eval_strategy="steps",  # Updated parameter name
         eval_steps=30,
         save_strategy="steps",
-        save_total_limit=2,
-        load_best_model_at_end=True,
-        metric_for_best_model="eval_loss",
-        greater_is_better=False,
+        save_total_limit=1,
+        load_best_model_at_end=False,  # Save memory
         report_to="none",
         fp16=True,
         dataloader_pin_memory=False,
+        dataloader_num_workers=0,
         weight_decay=0.01,
-        warmup_ratio=0.1,  # Warmup for better training
-        lr_scheduler_type="cosine",  # Cosine learning rate schedule
-        optim="adamw_torch"  # Optimized AdamW
+        warmup_ratio=0.1,
+        lr_scheduler_type="cosine",
+        optim="adamw_torch",
+        gradient_checkpointing=True,
+        remove_unused_columns=True,
+        max_grad_norm=1.0
     )
 
     trainer = SFTTrainer(
@@ -225,9 +233,9 @@ def train_interview_model(output_dir):
         eval_dataset=eval_dataset,
         peft_config=lora_config,
         dataset_text_field="text",
-        max_seq_length=512,  # Restored for better quality
+        max_seq_length=256,  # Smaller for memory efficiency
         tokenizer=tokenizer,
-        packing=True  # Enable packing for efficiency
+        packing=True
     )
     
     trainer.train()
@@ -265,11 +273,20 @@ def main():
     # Check for the Hugging Face token as an environment variable.
     # On Kaggle, this should be set in the "Secrets" section of your notebook.
     hf_token = os.getenv("HF_TOKEN")
+    if not hf_token:
+        # Try alternative environment variable names that Kaggle might use
+        hf_token = os.getenv("HUGGINGFACE_TOKEN") or os.getenv("HF_API_TOKEN")
+    
     if hf_token:
         print("Logging in to Hugging Face Hub...")
-        login(token=hf_token)
+        try:
+            login(token=hf_token)
+            print("Successfully authenticated with Hugging Face!")
+        except Exception as e:
+            print(f"Failed to authenticate: {e}")
     else:
         print("WARNING: No Hugging Face token found. Pre-trained model downloads may fail.")
+        print("Please ensure HF_TOKEN is set in Kaggle Secrets.")
 
 
     if args.model_type == "cover_letter":
