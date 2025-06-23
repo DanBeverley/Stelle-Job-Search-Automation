@@ -13,108 +13,171 @@ import numpy as np
 import argparse
 import re
 
-# --- Data Loading and Normalization Functions ---
-
-def parse_salary_range(salary_str):
-    """Parses salary strings like '$76k-$97k' into min and max integers."""
-    salary_str = salary_str.replace('$', '').replace('k', '000').replace('K','000')
-    parts = [p.strip() for p in salary_str.split('-')]
+def normalize_linkedin_data():
+    """Loads and normalizes the LinkedIn dataset."""
     try:
-        if len(parts) == 2:
-            return int(parts[0]), int(parts[1])
-        return None, None
-    except ValueError:
-        return None, None
+        print("Loading dataset 1: xanderios/linkedin-job-postings")
+        dataset = load_dataset("xanderios/linkedin-job-postings", data_files="job_postings_2.csv", split="train")
+        df = pd.DataFrame(dataset)
+        df = df.filter(['title', 'location', 'description', 'med_salary', 'pay_period'])
+        df.dropna(subset=['med_salary', 'pay_period'], inplace=True)
 
-def load_and_normalize_data():
-    """Loads, normalizes, and combines multiple datasets."""
-    all_dfs = []
-    
-    # --- Dataset 1: rishikeshv/job-descriptions-and-salary-dataset ---
-    try:
-        print("Loading dataset 1: rishikeshv/job-descriptions-and-salary-dataset")
-        ds1 = load_dataset("rishikeshv/job-descriptions-and-salary-dataset", split="train")
-        df1 = pd.DataFrame(ds1)
-        df1 = df1[['job_title', 'job_location', 'job_description', 'min_salary', 'max_salary']]
-        df1.columns = ['title', 'location', 'description', 'min_salary', 'max_salary']
-        all_dfs.append(df1)
+        def normalize_salary(row):
+            if row['pay_period'] == 'YEARLY':
+                return row['med_salary']
+            if row['pay_period'] == 'MONTHLY':
+                return row['med_salary'] * 12
+            if row['pay_period'] == 'HOURLY':
+                return row['med_salary'] * 40 * 52 # 40 hours/week, 52 weeks/year
+            return None
+        
+        df['yearly_salary'] = df.apply(normalize_salary, axis=1)
+        df.dropna(subset=['yearly_salary'], inplace=True)
+        # Create a plausible range from the median salary
+        df['min_salary'] = df['yearly_salary'] * 0.85
+        df['max_salary'] = df['yearly_salary'] * 1.15
+        return df[['title', 'location', 'description', 'min_salary', 'max_salary']]
     except Exception as e:
-        print(f"Could not load dataset 1. Error: {e}")
+        print(f"Could not process LinkedIn dataset. Error: {e}")
+        return pd.DataFrame()
 
-    # --- Dataset 2: ishaandey/job-positions-dataset ---
+def normalize_classification_data():
+    """Loads and normalizes the job posting classification dataset."""
     try:
-        print("Loading dataset 2: ishaandey/job-positions-dataset")
-        ds2 = load_dataset("ishaandey/job-positions-dataset", split="train")
-        df2 = pd.DataFrame(ds2)
-        df2 = df2[['Job Title', 'Location', 'Job Description', 'Salary']]
-        df2.columns = ['title', 'location', 'description', 'salary_str']
-        
-        salaries = df2['salary_str'].apply(parse_salary_range)
-        df2['min_salary'], df2['max_salary'] = zip(*salaries)
-        all_dfs.append(df2[['title', 'location', 'description', 'min_salary', 'max_salary']])
+        print("Loading dataset 2: will4381/job-posting-classification")
+        dataset = load_dataset("will4381/job-posting-classification", split="train")
+        df = pd.DataFrame(dataset)
+        df = df.filter(['Title', 'Location', 'Job Description', 'salary_range'])
+        df.dropna(subset=['salary_range'], inplace=True)
+
+        def parse_salary(s):
+            s = str(s).replace('$', '').replace(',', '').replace(' a year', '')
+            parts = [p.strip() for p in s.split('-')]
+            if len(parts) == 2:
+                try:
+                    return float(parts[0]), float(parts[1])
+                except ValueError:
+                    return None, None
+            return None, None
+
+        salaries = df['salary_range'].apply(parse_salary)
+        df['min_salary'], df['max_salary'] = zip(*salaries)
+        df.dropna(subset=['min_salary', 'max_salary'], inplace=True)
+        df.rename(columns={'Title': 'title', 'Location': 'location', 'Job Description': 'description'}, inplace=True)
+        return df[['title', 'location', 'description', 'min_salary', 'max_salary']]
     except Exception as e:
-        print(f"Could not load dataset 2. Error: {e}")
-        
-    if not all_dfs:
-        raise RuntimeError("Could not load any datasets. Please check names and availability.")
-        
-    # Combine all dataframes
-    combined_df = pd.concat(all_dfs, ignore_index=True)
-    print(f"Combined dataset has {len(combined_df)} records.")
-    return combined_df
+        print(f"Could not process classification dataset. Error: {e}")
+        return pd.DataFrame()
+
+def normalize_azrai_data():
+    """Loads, normalizes, and converts currency for the Azrai dataset."""
+    try:
+        print("Loading dataset 3: azrai99/job-dataset")
+        dataset = load_dataset("azrai99/job-dataset", split="train")
+        df = pd.DataFrame(dataset)
+        df = df.filter(['job_title', 'location', 'job_description', 'salary'])
+        df.dropna(subset=['salary'], inplace=True)
+        # Currency conversion rate (approximate)
+        RM_TO_USD = 1 / 4.7 
+
+        def parse_and_convert_salary(s):
+            s = str(s).lower().replace(',', '')
+            numbers = [float(n) for n in re.findall(r'[\d\.]+', s)]
+            if len(numbers) < 2: return None, None
+            
+            min_sal, max_sal = numbers[0], numbers[1]
+            if 'rm' in s:
+                min_sal *= RM_TO_USD
+                max_sal *= RM_TO_USD
+            if 'month' in s:
+                min_sal *= 12
+                max_sal *= 12
+
+            return min_sal, max_sal
+
+        salaries = df['salary'].apply(parse_and_convert_salary)
+        df['min_salary'], df['max_salary'] = zip(*salaries)
+        df.dropna(subset=['min_salary', 'max_salary'], inplace=True)
+        df.rename(columns={'job_title': 'title', 'job_description': 'description'}, inplace=True)
+        return df[['title', 'location', 'description', 'min_salary', 'max_salary']]
+    except Exception as e:
+        print(f"Could not process Azrai dataset. Error: {e}")
+        return pd.DataFrame()
 
 def main():
-    parser = argparse.ArgumentParser(description="Train a salary prediction model on multiple datasets.")
-    parser.add_argument("--output_dir", type=str, required=True, help="The directory to save the model.")
+    parser = argparse.ArgumentParser(description="Train a salary prediction model using multiple datasets.")
+    parser.add_argument("--output_dir", type=str, required=True, help="Directory to save the model artifacts.")
     args = parser.parse_args()
 
-    MODEL_DIR = args.output_dir
-    MODEL_FILE = os.path.join(MODEL_DIR, "salary_predictor_xgboost.json")
-    PREPROCESSOR_FILE = os.path.join(MODEL_DIR, "salary_predictor_preprocessor.joblib")
-    os.makedirs(MODEL_DIR, exist_ok=True)
+    os.makedirs(args.output_dir, exist_ok=True)
+    MODEL_FILE = os.path.join(args.output_dir, "salary_predictor_xgboost.json")
+    PREPROCESSOR_FILE = os.path.join(args.output_dir, "salary_predictor_preprocessor.joblib")
 
-    df = load_and_normalize_data()
-
-    print("Cleaning and preparing combined data...")
-    df.dropna(subset=['min_salary', 'max_salary', 'description', 'location', 'title'], inplace=True)
-    df['Salary.Avg'] = (df['min_salary'] + df['max_salary']) / 2
+    # Load, Normalize, and Combine Data 
+    df1 = normalize_linkedin_data()
+    df2 = normalize_classification_data()
+    df3 = normalize_azrai_data()
     
-    top_locations = df['location'].value_counts().nlargest(20).index
-    df['Location'] = df['location'].where(df['location'].isin(top_locations), 'Other')
+    combined_df = pd.concat([df1, df2, df3], ignore_index=True)
+    if combined_df.empty:
+        raise RuntimeError("All datasets failed to load. Aborting training.")
+    print(f"\n--- Combined dataset has {len(combined_df)} records after normalization. ---")
 
-    top_titles = df['title'].value_counts().nlargest(50).index
-    df['Job.Title'] = df['title'].where(df['title'].isin(top_titles), 'Other')
+    # Feature Engineering
+    print("Preparing final features for training...")
+    combined_df.dropna(inplace=True)
+    combined_df['Salary.Avg'] = (combined_df['min_salary'] + combined_df['max_salary']) / 2
 
-    X = df[['Job.Title', 'Location', 'description']]
-    y = df['Salary.Avg']
+    # Remove outliers for more stable training
+    q_low = combined_df['Salary.Avg'].quantile(0.01)
+    q_hi  = combined_df['Salary.Avg'].quantile(0.99)
+    combined_df = combined_df[(combined_df['Salary.Avg'] > q_low) & (combined_df['Salary.Avg'] < q_hi)]
+    print(f"Dataset has {len(combined_df)} records after removing outliers.")
 
+    X = combined_df[['title', 'location', 'description']]
+    y = combined_df['Salary.Avg']
+
+    # Model Training Pipeline
     preprocessor = ColumnTransformer(
         transformers=[
-            ('title_cat', OneHotEncoder(handle_unknown='ignore'), ['Job.Title']),
-            ('location_cat', OneHotEncoder(handle_unknown='ignore'), ['Location']),
-            ('desc_tfidf', TfidfVectorizer(max_features=1000, stop_words='english', max_df=0.9, min_df=5)),
+            ('title', OneHotEncoder(handle_unknown='ignore', max_categories=100), ['title']),
+            ('location', OneHotEncoder(handle_unknown='ignore', max_categories=50), ['location']),
+            ('description', TfidfVectorizer(max_features=1500, stop_words='english', ngram_range=(1,2))),
         ],
         remainder='passthrough'
     )
 
     model_pipeline = Pipeline(steps=[
         ('preprocessor', preprocessor),
-        ('regressor', xgb.XGBRegressor(objective='reg:squarederror', n_estimators=150, learning_rate=0.05, max_depth=6, random_state=42, n_jobs=-1, subsample=0.8, colsample_bytree=0.8))
+        ('regressor', xgb.XGBRegressor(
+            objective='reg:squarederror', 
+            n_estimators=200, 
+            learning_rate=0.05, 
+            max_depth=7,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            random_state=42, 
+            n_jobs=-1,
+            early_stopping_rounds=10 # Add early stopping
+        ))
     ])
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     
-    print("Training model...")
-    model_pipeline.fit(X_train, y_train)
+    print("\n--- Training XGBoost model... ---")
+    # Use eval_set for early stopping
+    eval_set = [(model_pipeline['preprocessor'].fit_transform(X_test), y_test)]
+    model_pipeline.fit(X_train, y_train, regressor__eval_set=eval_set, regressor__verbose=False)
     
     y_pred = model_pipeline.predict(X_test)
     rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-    print(f"Model evaluation complete. RMSE on test data: ${rmse:,.2f}")
+    print(f"--- Model training complete. RMSE on test data: ${rmse:,.2f} ---")
 
-    print(f"Saving model and preprocessor to {MODEL_DIR}")
+    # Save Artifacts 
+    print(f"\nSaving model and preprocessor to {args.output_dir}")
     model_pipeline.named_steps['regressor'].save_model(MODEL_FILE)
     joblib.dump(model_pipeline.named_steps['preprocessor'], PREPROCESSOR_FILE)
-    print("Salary prediction model saved successfully.")
+    print("--- Artifacts saved successfully. ---")
 
 if __name__ == "__main__":
     main() 
