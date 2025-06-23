@@ -47,8 +47,32 @@ def normalize_classification_data():
         print("Loading dataset 2: will4381/job-posting-classification")
         dataset = load_dataset("will4381/job-posting-classification", split="train")
         df = pd.DataFrame(dataset)
-        df = df.filter(['Title', 'Location', 'Job.Description', 'salary_range'])
-        df.dropna(subset=['salary_range'], inplace=True)
+        
+        # Print available columns for debugging
+        print(f"Available columns: {df.columns.tolist()}")
+        
+        # Try different possible column names
+        title_col = None
+        location_col = None
+        description_col = None
+        salary_col = None
+        
+        for col in df.columns:
+            if 'title' in col.lower():
+                title_col = col
+            elif 'location' in col.lower():
+                location_col = col
+            elif 'description' in col.lower():
+                description_col = col
+            elif 'salary' in col.lower():
+                salary_col = col
+        
+        if not all([title_col, location_col, description_col, salary_col]):
+            print(f"Missing required columns. Found: title={title_col}, location={location_col}, description={description_col}, salary={salary_col}")
+            return pd.DataFrame()
+        
+        df = df[[title_col, location_col, description_col, salary_col]].copy()
+        df.dropna(subset=[salary_col], inplace=True)
 
         def parse_salary(s):
             s = str(s).replace('$', '').replace(',', '').replace(' a year', '')
@@ -60,10 +84,10 @@ def normalize_classification_data():
                     return None, None
             return None, None
 
-        salaries = df['salary_range'].apply(parse_salary)
+        salaries = df[salary_col].apply(parse_salary)
         df['min_salary'], df['max_salary'] = zip(*salaries)
         df.dropna(subset=['min_salary', 'max_salary'], inplace=True)
-        df.rename(columns={'Title': 'title', 'Location': 'location', 'Job.Description': 'description'}, inplace=True)
+        df.rename(columns={title_col: 'title', location_col: 'location', description_col: 'description'}, inplace=True)
         return df[['title', 'location', 'description', 'min_salary', 'max_salary']]
     except Exception as e:
         print(f"Could not process classification dataset. Error: {e}")
@@ -81,8 +105,16 @@ def normalize_azrai_data():
         RM_TO_USD = 1 / 4.7 
 
         def parse_and_convert_salary(s):
-            s = str(s).lower().replace(',', '')
-            numbers = [float(n) for n in re.findall(r'[\d\.]+', s) if n and n != '.']
+            s = str(s).lower().replace(',', '').strip()
+            s = re.sub(r'\.+$', '', s) 
+            numbers = []
+            for n in re.findall(r'\d+(?:\.\d+)?', s):  
+                if n and n != '.' and n != '':
+                    try:
+                        numbers.append(float(n))
+                    except ValueError:
+                        continue
+            
             if len(numbers) < 2: return None, None
             
             min_sal, max_sal = numbers[0], numbers[1]
@@ -142,9 +174,9 @@ def main():
         transformers=[
             ('title', OneHotEncoder(handle_unknown='ignore', max_categories=100), ['title']),
             ('location', OneHotEncoder(handle_unknown='ignore', max_categories=50), ['location']),
-            ('description', TfidfVectorizer(max_features=1500, stop_words='english', ngram_range=(1,2))),
+            ('description', TfidfVectorizer(max_features=1500, stop_words='english', ngram_range=(1,2)), ['description']),
         ],
-        remainder='passthrough'
+        remainder='drop'
     )
 
     model_pipeline = Pipeline(steps=[
@@ -157,17 +189,15 @@ def main():
             subsample=0.8,
             colsample_bytree=0.8,
             random_state=42, 
-            n_jobs=-1,
-            early_stopping_rounds=10 # Add early stopping
+            n_jobs=-1
         ))
     ])
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     
     print("\n--- Training XGBoost model... ---")
-    # Use eval_set for early stopping
-    eval_set = [(model_pipeline['preprocessor'].fit_transform(X_test), y_test)]
-    model_pipeline.fit(X_train, y_train, regressor__eval_set=eval_set, regressor__verbose=False)
+    # Fit the model without early stopping for simplicity
+    model_pipeline.fit(X_train, y_train)
     
     y_pred = model_pipeline.predict(X_test)
     rmse = np.sqrt(mean_squared_error(y_test, y_pred))
