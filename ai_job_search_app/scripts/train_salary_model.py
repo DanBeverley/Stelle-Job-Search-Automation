@@ -17,7 +17,7 @@ def normalize_linkedin_data():
     """Loads and normalizes the LinkedIn dataset."""
     try:
         print("Loading dataset 1: xanderios/linkedin-job-postings")
-        dataset = load_dataset("xanderios/linkedin-job-postings", data_files="job_postings_2.csv", split="train")
+        dataset = load_dataset("xanderios/linkedin-job-postings", data_files="job_postings.csv", split="train")
         df = pd.DataFrame(dataset)
         df = df.filter(['title', 'location', 'description', 'med_salary', 'pay_period'])
         df.dropna(subset=['med_salary', 'pay_period'], inplace=True)
@@ -47,7 +47,7 @@ def normalize_classification_data():
         print("Loading dataset 2: will4381/job-posting-classification")
         dataset = load_dataset("will4381/job-posting-classification", split="train")
         df = pd.DataFrame(dataset)
-        df = df.filter(['Title', 'Location', 'Job Description', 'salary_range'])
+        df = df.filter(['Title', 'Location', 'Job.Description', 'salary_range'])
         df.dropna(subset=['salary_range'], inplace=True)
 
         def parse_salary(s):
@@ -63,7 +63,7 @@ def normalize_classification_data():
         salaries = df['salary_range'].apply(parse_salary)
         df['min_salary'], df['max_salary'] = zip(*salaries)
         df.dropna(subset=['min_salary', 'max_salary'], inplace=True)
-        df.rename(columns={'Title': 'title', 'Location': 'location', 'Job Description': 'description'}, inplace=True)
+        df.rename(columns={'Title': 'title', 'Location': 'location', 'Job.Description': 'description'}, inplace=True)
         return df[['title', 'location', 'description', 'min_salary', 'max_salary']]
     except Exception as e:
         print(f"Could not process classification dataset. Error: {e}")
@@ -82,7 +82,7 @@ def normalize_azrai_data():
 
         def parse_and_convert_salary(s):
             s = str(s).lower().replace(',', '')
-            numbers = [float(n) for n in re.findall(r'[\d\.]+', s)]
+            numbers = [float(n) for n in re.findall(r'[\d\.]+', s) if n and n != '.']
             if len(numbers) < 2: return None, None
             
             min_sal, max_sal = numbers[0], numbers[1]

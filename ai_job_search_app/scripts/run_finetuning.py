@@ -12,6 +12,7 @@ from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from trl import SFTTrainer
 import os
 import argparse
+from huggingface_hub import login
 
 # --- Utility Functions ---
 
@@ -144,7 +145,7 @@ def train_interview_model(output_dir):
     """Fine-tunes the interview question generation model with optimization techniques."""
     MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.2"
 
-    train_dataset, eval_dataset = prepare_interview_data("ought/raft-job-interview-training-data")
+    train_dataset, eval_dataset = prepare_interview_data("jacobgr/raft-job-interview-training-data")
     
     bnb_config = get_quantization_config()
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, trust_remote_code=True)
@@ -207,6 +208,17 @@ def main():
         help="The directory to save the fine-tuned model."
     )
     args = parser.parse_args()
+
+    # --- Hugging Face Login ---
+    # Check for the Hugging Face token as an environment variable.
+    # On Kaggle, this should be set in the "Secrets" section of your notebook.
+    hf_token = os.getenv("HF_TOKEN")
+    if hf_token:
+        print("Logging in to Hugging Face Hub...")
+        login(token=hf_token)
+    else:
+        print("WARNING: No Hugging Face token found. Pre-trained model downloads may fail.")
+
 
     if args.model_type == "cover_letter":
         print("--- Starting Cover Letter Model Fine-Tuning ---")
