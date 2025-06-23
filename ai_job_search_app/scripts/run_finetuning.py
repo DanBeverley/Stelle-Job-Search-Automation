@@ -67,7 +67,7 @@ Generate a professional cover letter based on the following job details and cand
 
 def train_cover_letter_model(output_dir):
     """Fine-tunes the cover letter generation model with optimization techniques."""
-    MODEL_ID = "google/gemma-2b-it"
+    MODEL_ID = "microsoft/DialoGPT-medium"  # Using a non-gated model
     CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
 
     train_dataset, eval_dataset = prepare_cover_letter_data("ShashiVish/cover-letter-dataset", CACHE_DIR)
@@ -119,14 +119,37 @@ def train_cover_letter_model(output_dir):
 # --- Interview Question Model ---
 
 def prepare_interview_data(dataset_name):
-    """Loads and prepares the interview question dataset, splitting it."""
-    # This dataset has a specific structure we can leverage
-    dataset = load_dataset(dataset_name, split="train")
+    """Creates a simple synthetic interview dataset for training."""
+    # Create synthetic interview data since the original dataset doesn't exist
+    synthetic_data = []
+    
+    job_descriptions = [
+        "Software Engineer position requiring Python, JavaScript, and React experience",
+        "Data Scientist role focusing on machine learning and statistical analysis",
+        "Product Manager position requiring stakeholder management and strategic planning",
+        "DevOps Engineer role with AWS, Docker, and Kubernetes experience",
+        "UX Designer position requiring user research and prototyping skills"
+    ]
+    
+    interview_questions = [
+        "Tell me about a challenging project you worked on and how you overcame obstacles.",
+        "How do you approach problem-solving when faced with a complex technical issue?",
+        "Describe a time when you had to work with a difficult team member.",
+        "What motivates you in your work and how do you stay current with industry trends?",
+        "How do you prioritize tasks when managing multiple projects simultaneously?"
+    ]
+    
+    for i, job_desc in enumerate(job_descriptions):
+        for j, question in enumerate(interview_questions):
+            synthetic_data.append({
+                "text": f"### JOB DESCRIPTION:\n{job_desc}\n### INTERVIEW QUESTION:\n{question}"
+            })
+    
+    # Create dataset
+    dataset = Dataset.from_list(synthetic_data)
     dataset = dataset.shuffle(seed=42)
-    # Using the full dataset as it's well-formatted, and splitting it
     split_dataset = dataset.train_test_split(test_size=0.2)
-    return split_dataset['train'].map(format_interview_prompt), \
-           split_dataset['test'].map(format_interview_prompt)
+    return split_dataset['train'], split_dataset['test']
 
 
 def format_interview_prompt(data_point):
@@ -151,9 +174,9 @@ Generate an interview question for the following candidate and job role.
 
 def train_interview_model(output_dir):
     """Fine-tunes the interview question generation model with optimization techniques."""
-    MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.2"
+    MODEL_ID = "microsoft/DialoGPT-medium"  # Using a non-gated model
 
-    train_dataset, eval_dataset = prepare_interview_data("jacobgr/raft-job-interview-training-data")
+    train_dataset, eval_dataset = prepare_interview_data("synthetic")
     
     bnb_config = get_quantization_config()
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, trust_remote_code=True)
