@@ -51,28 +51,53 @@ def normalize_classification_data():
         # Print available columns for debugging
         print(f"Available columns: {df.columns.tolist()}")
         
-        # Try different possible column names
-        title_col = None
-        location_col = None
-        description_col = None
-        salary_col = None
+        # Map available columns to what we need
+        column_mapping = {}
         
+        # Look for title-like columns
         for col in df.columns:
-            if 'title' in col.lower():
-                title_col = col
-            elif 'location' in col.lower():
-                location_col = col
-            elif 'description' in col.lower():
-                description_col = col
-            elif 'salary' in col.lower():
-                salary_col = col
+            if any(keyword in col.lower() for keyword in ['title', 'position', 'job']):
+                column_mapping['title'] = col
+                break
         
-        if not all([title_col, location_col, description_col, salary_col]):
-            print(f"Missing required columns. Found: title={title_col}, location={location_col}, description={description_col}, salary={salary_col}")
+        # Look for location-like columns (optional for this dataset)
+        for col in df.columns:
+            if 'location' in col.lower():
+                column_mapping['location'] = col
+                break
+        
+        # Look for description-like columns
+        for col in df.columns:
+            if any(keyword in col.lower() for keyword in ['description', 'summary', 'responsibilities']):
+                column_mapping['description'] = col
+                break
+        
+        # Look for salary columns
+        for col in df.columns:
+            if 'salary' in col.lower():
+                column_mapping['salary'] = col
+                break
+        
+        # Check if we have minimum required columns (title, description, salary)
+        required_cols = ['title', 'description', 'salary']
+        missing_cols = [col for col in required_cols if col not in column_mapping]
+        
+        if missing_cols:
+            print(f"Missing required columns: {missing_cols}")
+            print(f"Available columns: {df.columns.tolist()}")
             return pd.DataFrame()
         
-        df = df[[title_col, location_col, description_col, salary_col]].copy()
-        df.dropna(subset=[salary_col], inplace=True)
+        # Use job_position as title if available
+        if 'job_position' in df.columns:
+            column_mapping['title'] = 'job_position'
+        
+        # Extract the columns we need
+        cols_to_extract = [column_mapping[col] for col in ['title', 'description', 'salary']]
+        if 'location' in column_mapping:
+            cols_to_extract.append(column_mapping['location'])
+        
+        df = df[cols_to_extract].copy()
+        df.dropna(subset=[column_mapping['salary']], inplace=True)
 
         def parse_salary(s):
             s = str(s).replace('$', '').replace(',', '').replace(' a year', '')
@@ -84,11 +109,27 @@ def normalize_classification_data():
                     return None, None
             return None, None
 
-        salaries = df[salary_col].apply(parse_salary)
+        salaries = df[column_mapping['salary']].apply(parse_salary)
         df['min_salary'], df['max_salary'] = zip(*salaries)
         df.dropna(subset=['min_salary', 'max_salary'], inplace=True)
-        df.rename(columns={title_col: 'title', location_col: 'location', description_col: 'description'}, inplace=True)
-        return df[['title', 'location', 'description', 'min_salary', 'max_salary']]
+        
+        # Create the rename mapping
+        rename_mapping = {
+            column_mapping['title']: 'title',
+            column_mapping['description']: 'description'
+        }
+        if 'location' in column_mapping:
+            rename_mapping[column_mapping['location']] = 'location'
+        
+        df.rename(columns=rename_mapping, inplace=True)
+        
+        # Return with or without location column
+        if 'location' in df.columns:
+            return df[['title', 'location', 'description', 'min_salary', 'max_salary']]
+        else:
+            # Add a dummy location column if missing
+            df['location'] = 'Unknown'
+            return df[['title', 'location', 'description', 'min_salary', 'max_salary']]
     except Exception as e:
         print(f"Could not process classification dataset. Error: {e}")
         return pd.DataFrame()
@@ -99,8 +140,35 @@ def normalize_azrai_data():
         print("Loading dataset 3: azrai99/job-dataset")
         dataset = load_dataset("azrai99/job-dataset", split="train")
         df = pd.DataFrame(dataset)
-        df = df.filter(['job_title', 'location', 'job_description', 'salary'])
-        df.dropna(subset=['salary'], inplace=True)
+        # Check available columns
+        print(f"Azrai dataset columns: {df.columns.tolist()}")
+        
+        # Map columns dynamically
+        column_mapping = {}
+        for col in df.columns:
+            if any(keyword in col.lower() for keyword in ['job_title', 'title']):
+                column_mapping['title'] = col
+            elif 'location' in col.lower():
+                column_mapping['location'] = col
+            elif any(keyword in col.lower() for keyword in ['job_description', 'description']):
+                column_mapping['description'] = col
+            elif 'salary' in col.lower():
+                column_mapping['salary'] = col
+        
+        required_cols = ['title', 'description', 'salary']
+        missing_cols = [col for col in required_cols if col not in column_mapping]
+        
+        if missing_cols:
+            print(f"Azrai dataset missing columns: {missing_cols}")
+            return pd.DataFrame()
+        
+        # Extract required columns
+        cols_to_extract = [column_mapping[col] for col in required_cols]
+        if 'location' in column_mapping:
+            cols_to_extract.append(column_mapping['location'])
+        
+        df = df[cols_to_extract].copy()
+        df.dropna(subset=[column_mapping['salary']], inplace=True)
         # Currency conversion rate (approximate)
         RM_TO_USD = 1 / 4.7 
 
@@ -127,11 +195,26 @@ def normalize_azrai_data():
 
             return min_sal, max_sal
 
-        salaries = df['salary'].apply(parse_and_convert_salary)
+        salaries = df[column_mapping['salary']].apply(parse_and_convert_salary)
         df['min_salary'], df['max_salary'] = zip(*salaries)
         df.dropna(subset=['min_salary', 'max_salary'], inplace=True)
-        df.rename(columns={'job_title': 'title', 'job_description': 'description'}, inplace=True)
-        return df[['title', 'location', 'description', 'min_salary', 'max_salary']]
+        
+        # Create rename mapping
+        rename_mapping = {
+            column_mapping['title']: 'title',
+            column_mapping['description']: 'description'
+        }
+        if 'location' in column_mapping:
+            rename_mapping[column_mapping['location']] = 'location'
+        
+        df.rename(columns=rename_mapping, inplace=True)
+        
+        # Return with or without location
+        if 'location' in df.columns:
+            return df[['title', 'location', 'description', 'min_salary', 'max_salary']]
+        else:
+            df['location'] = 'Unknown'
+            return df[['title', 'location', 'description', 'min_salary', 'max_salary']]
     except Exception as e:
         print(f"Could not process Azrai dataset. Error: {e}")
         return pd.DataFrame()
@@ -166,17 +249,23 @@ def main():
     combined_df = combined_df[(combined_df['Salary.Avg'] > q_low) & (combined_df['Salary.Avg'] < q_hi)]
     print(f"Dataset has {len(combined_df)} records after removing outliers.")
 
+    # Ensure all text fields are strings and handle missing values
+    combined_df['title'] = combined_df['title'].fillna('Unknown').astype(str)
+    combined_df['location'] = combined_df['location'].fillna('Unknown').astype(str)
+    combined_df['description'] = combined_df['description'].fillna('No description').astype(str)
+    
     X = combined_df[['title', 'location', 'description']]
     y = combined_df['Salary.Avg']
 
-    # Model Training Pipeline
-    preprocessor = ColumnTransformer(
-        transformers=[
-            ('title', OneHotEncoder(handle_unknown='ignore', max_categories=100), ['title']),
-            ('location', OneHotEncoder(handle_unknown='ignore', max_categories=50), ['location']),
-            ('description', TfidfVectorizer(max_features=1500, stop_words='english', ngram_range=(1,2)), ['description']),
-        ],
-        remainder='drop'
+    # Model Training Pipeline - use make_column_transformer for better handling
+    from sklearn.compose import make_column_transformer
+    
+    preprocessor = make_column_transformer(
+        (OneHotEncoder(handle_unknown='ignore', max_categories=100, sparse_output=False), ['title']),
+        (OneHotEncoder(handle_unknown='ignore', max_categories=50, sparse_output=False), ['location']),
+        (TfidfVectorizer(max_features=1500, stop_words='english', ngram_range=(1,2)), 'description'),
+        remainder='drop',
+        sparse_threshold=0  # Force dense output
     )
 
     model_pipeline = Pipeline(steps=[
