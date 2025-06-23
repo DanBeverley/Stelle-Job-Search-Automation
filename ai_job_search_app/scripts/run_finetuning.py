@@ -1,18 +1,26 @@
 import torch
-from datasets import load_dataset, Dataset
-from transformers import (
-    AutoModelForCausalLM, 
-    AutoTokenizer, 
-    BitsAndBytesConfig, 
-    TrainingArguments,
-    TrainerCallback,
-    EarlyStoppingCallback
-)
-from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-from trl import SFTTrainer
 import os
 import argparse
-from huggingface_hub import login
+
+# Handle potential import issues with graceful fallbacks
+try:
+    from datasets import load_dataset, Dataset
+    from transformers import (
+        AutoModelForCausalLM, 
+        AutoTokenizer, 
+        BitsAndBytesConfig, 
+        TrainingArguments,
+        TrainerCallback,
+        EarlyStoppingCallback
+    )
+    from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+    from trl import SFTTrainer
+    from huggingface_hub import login
+    IMPORTS_SUCCESSFUL = True
+except ImportError as e:
+    print(f"Import error: {e}")
+    print("Some dependencies may be incompatible. Please check your environment.")
+    IMPORTS_SUCCESSFUL = False
 
 # --- Utility Functions ---
 
@@ -193,6 +201,13 @@ def train_interview_model(output_dir):
 # --- Main Execution ---
 
 def main():
+    # Check if imports were successful
+    if not IMPORTS_SUCCESSFUL:
+        print("ERROR: Required dependencies could not be imported.")
+        print("Please install compatible versions of the required packages:")
+        print("pip install torch>=2.1.0,<2.5.0 transformers>=4.36.0,<4.46.0 accelerate>=0.25.0,<0.35.0")
+        return
+    
     parser = argparse.ArgumentParser(description="Fine-tune a model for a specific task.")
     parser.add_argument(
         "--model_type",
