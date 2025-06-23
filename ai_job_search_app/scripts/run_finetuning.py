@@ -66,8 +66,8 @@ Generate a professional cover letter based on the following job details and cand
 {data_point.get('Cover Letter', 'N/A')}<end_of_turn>"""
 
 def train_cover_letter_model(output_dir):
-    """Fine-tunes the cover letter generation model with optimization techniques."""
-    MODEL_ID = "microsoft/DialoGPT-medium"  # Using a non-gated model
+    """Fine-tunes the cover letter generation model with state-of-the-art optimization techniques."""
+    MODEL_ID = "meta-llama/Llama-2-7b-chat-hf"  # State-of-the-art model
     CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
 
     train_dataset, eval_dataset = prepare_cover_letter_data("ShashiVish/cover-letter-dataset", CACHE_DIR)
@@ -77,26 +77,32 @@ def train_cover_letter_model(output_dir):
     tokenizer.pad_token = tokenizer.eos_token
     model = AutoModelForCausalLM.from_pretrained(MODEL_ID, quantization_config=bnb_config, device_map="auto", cache_dir=CACHE_DIR)
 
-    lora_config = get_lora_config(r=8, lora_alpha=32, target_modules=["q_proj", "o_proj", "k_proj", "v_proj", "gate_proj", "up_proj", "down_proj"], lora_dropout=0.05)
+    # Llama-2 specific target modules for LoRA
+    lora_config = get_lora_config(r=16, lora_alpha=32, target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"], lora_dropout=0.05)
     model = prepare_model_for_kbit_training(model)
     model = get_peft_model(model, lora_config)
 
     training_args = TrainingArguments(
         output_dir=output_dir,
-        per_device_train_batch_size=2,
-        gradient_accumulation_steps=4,
-        learning_rate=2e-4,
+        per_device_train_batch_size=1,  # Reduced for 7B model
+        gradient_accumulation_steps=8,  # Increased to maintain effective batch size
+        learning_rate=1e-4,  # Slightly lower for stability
         num_train_epochs=3,
         logging_steps=10,
-        evaluation_strategy="steps", # Evaluate at each logging step
-        eval_steps=50,               # Evaluation frequency
-        save_strategy="steps",       # Save model based on evaluation
-        save_total_limit=2,          # Only keep the best and the latest model
-        load_best_model_at_end=True, # Load the best model at the end of training
+        evaluation_strategy="steps",
+        eval_steps=50,
+        save_strategy="steps",
+        save_total_limit=2,
+        load_best_model_at_end=True,
+        metric_for_best_model="eval_loss",
+        greater_is_better=False,
         report_to="none",
         fp16=True,
-        weight_decay=0.01,           # L2 Regularization
-        callbacks=[EarlyStoppingCallback(early_stopping_patience=3)]
+        dataloader_pin_memory=False,
+        weight_decay=0.01,
+        warmup_ratio=0.1,  # Warmup for better training
+        lr_scheduler_type="cosine",  # Cosine learning rate schedule
+        optim="adamw_torch"  # Optimized AdamW
     )
 
     trainer = SFTTrainer(
@@ -108,7 +114,7 @@ def train_cover_letter_model(output_dir):
         dataset_text_field="Cover Letter",
         tokenizer=tokenizer,
         packing=True,
-        max_seq_length=1024,
+        max_seq_length=1024,  # Restored for better quality
         formatting_func=format_cover_letter_prompt,
     )
 
@@ -173,35 +179,43 @@ Generate an interview question for the following candidate and job role.
     return {"text": formatted_prompt}
 
 def train_interview_model(output_dir):
-    """Fine-tunes the interview question generation model with optimization techniques."""
-    MODEL_ID = "microsoft/DialoGPT-medium"  # Using a non-gated model
+    """Fine-tunes the interview question generation model with state-of-the-art optimization techniques."""
+    MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.3"  # Latest Mistral model
 
     train_dataset, eval_dataset = prepare_interview_data("synthetic")
     
     bnb_config = get_quantization_config()
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
     tokenizer.pad_token = tokenizer.eos_token
-    model = AutoModelForCausalLM.from_pretrained(MODEL_ID, quantization_config=bnb_config, device_map="auto", trust_remote_code=True)
+    model = AutoModelForCausalLM.from_pretrained(MODEL_ID, quantization_config=bnb_config, device_map="auto")
     model.config.use_cache = False
 
-    lora_config = get_lora_config(r=16, lora_alpha=32, target_modules=["q_proj", "v_proj"], lora_dropout=0.05)
+    # Mistral specific target modules for LoRA
+    lora_config = get_lora_config(r=16, lora_alpha=32, target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"], lora_dropout=0.05)
     model = prepare_model_for_kbit_training(model)
     model = get_peft_model(model, lora_config)
 
     training_args = TrainingArguments(
         output_dir=output_dir,
-        per_device_train_batch_size=2, # Reduced for stability
-        gradient_accumulation_steps=4,
-        learning_rate=2e-4,
+        per_device_train_batch_size=1,  # Reduced for 7B model
+        gradient_accumulation_steps=8,  # Increased to maintain effective batch size
+        learning_rate=1e-4,  # Slightly lower for stability
         logging_steps=10,
-        max_steps=200, # Increased for meaningful training
+        max_steps=300,  # Increased for meaningful training
         evaluation_strategy="steps",
-        eval_steps=20,
+        eval_steps=30,
         save_strategy="steps",
         save_total_limit=2,
         load_best_model_at_end=True,
+        metric_for_best_model="eval_loss",
+        greater_is_better=False,
         report_to="none",
-        weight_decay=0.01 # L2 Regularization
+        fp16=True,
+        dataloader_pin_memory=False,
+        weight_decay=0.01,
+        warmup_ratio=0.1,  # Warmup for better training
+        lr_scheduler_type="cosine",  # Cosine learning rate schedule
+        optim="adamw_torch"  # Optimized AdamW
     )
 
     trainer = SFTTrainer(
@@ -211,9 +225,9 @@ def train_interview_model(output_dir):
         eval_dataset=eval_dataset,
         peft_config=lora_config,
         dataset_text_field="text",
-        max_seq_length=512,
+        max_seq_length=512,  # Restored for better quality
         tokenizer=tokenizer,
-        callbacks=[EarlyStoppingCallback(early_stopping_patience=3)]
+        packing=True  # Enable packing for efficiency
     )
     
     trainer.train()
