@@ -4,10 +4,11 @@ import argparse
 import warnings
 import random
 import numpy as np
+import time
 
 # Handle potential import issues with graceful fallbacks
 try:
-    from datasets import load_dataset, Dataset
+    from datasets import load_dataset, Dataset, DownloadConfig
     from transformers import (
         AutoModelForCausalLM, 
         AutoTokenizer,
@@ -22,6 +23,7 @@ try:
     from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training, TaskType
     from trl import SFTTrainer, DataCollatorForCompletionOnlyLM
     from huggingface_hub import login
+    import requests
     IMPORTS_SUCCESSFUL = True
 except ImportError as e:
     print(f"Import error: {e}")
@@ -42,6 +44,38 @@ def set_random_seeds(seed=42):
     torch.cuda.manual_seed_all(seed)
 
 # --- Utility Functions ---
+
+def download_with_retry(download_func, *args, max_retries=3, **kwargs):
+    """Generic retry wrapper for download functions"""
+    for attempt in range(max_retries):
+        try:
+            # Increase timeout for each retry
+            timeout = 30 * (attempt + 1)
+            if 'cache_dir' in kwargs:
+                kwargs['local_files_only'] = False
+            
+            # Try to set longer timeout if possible
+            if 'timeout' in kwargs:
+                kwargs['timeout'] = timeout
+                
+            return download_func(*args, **kwargs)
+        except Exception as e:
+            if "timeout" in str(e).lower() or "timed out" in str(e).lower():
+                print(f"Timeout on attempt {attempt + 1}/{max_retries}: {e}")
+                if attempt < max_retries - 1:
+                    wait_time = (attempt + 1) * 10
+                    print(f"Waiting {wait_time} seconds before retry...")
+                    time.sleep(wait_time)
+                else:
+                    print("Max retries reached. Using offline mode if available.")
+                    if 'local_files_only' in kwargs:
+                        kwargs['local_files_only'] = True
+                        try:
+                            return download_func(*args, **kwargs)
+                        except:
+                            raise e
+            else:
+                raise e
 
 def get_quantization_config():
     """Returns the BitsAndBytes configuration for 4-bit quantization (QLoRA)."""
@@ -82,19 +116,68 @@ def augment_text(text, augment_prob=0.1):
 
 # --- Cover Letter Model ---
 
+def create_synthetic_cover_letters(n_samples=500):
+    """Create synthetic cover letter data as fallback"""
+    print("Creating synthetic cover letter data...")
+    
+    job_titles = ["Software Engineer", "Data Scientist", "Product Manager", "Marketing Manager",
+                  "Sales Representative", "Project Manager", "Business Analyst", "UX Designer"]
+    companies = ["Tech Corp", "Innovation Labs", "Global Solutions", "Future Systems",
+                 "Digital Dynamics", "Creative Agency", "StartUp Inc", "Enterprise Co"]
+    
+    templates = [
+        "Dear Hiring Manager,\n\nI am writing to express my strong interest in the {title} position at {company}. With my background in the field and proven track record of success, I am confident I would be a valuable addition to your team.\n\nI bring extensive experience in relevant areas and have consistently delivered results in my previous roles. My skills align perfectly with your requirements, and I am excited about the opportunity to contribute to {company}'s continued success.\n\nI look forward to discussing how I can contribute to your team.\n\nSincerely,\nApplicant",
+        "Dear {company} Team,\n\nI am excited to apply for the {title} role at your organization. My professional experience and passion for the industry make me an ideal candidate for this position.\n\nThroughout my career, I have developed strong skills that directly relate to this role. I am particularly drawn to {company}'s innovative approach and would be thrilled to contribute to your mission.\n\nThank you for considering my application. I am eager to bring my expertise to your team.\n\nBest regards,\nApplicant"
+    ]
+    
+    data = []
+    for _ in range(n_samples):
+        title = random.choice(job_titles)
+        company = random.choice(companies)
+        template = random.choice(templates)
+        letter = template.format(title=title, company=company)
+        
+        data.append({
+            "Job Title": title,
+            "Hiring Company": company,
+            "Cover Letter": letter
+        })
+    
+    return Dataset.from_list(data)
+
 def prepare_cover_letter_data(dataset_name, cache_dir):
-    """Balanced dataset preparation for sub-0.8 loss target."""
-    dataset = load_dataset(dataset_name, split="train", cache_dir=cache_dir)
-    dataset = dataset.shuffle(seed=42)
-    
-    # Reasonable dataset size - enough to learn patterns but small enough to memorize
-    split_dataset = dataset.train_test_split(test_size=0.1, seed=42)
-    
-    train_size = min(500, len(split_dataset['train']))  # 500 examples - reasonable for memorization
-    eval_size = min(50, len(split_dataset['test']))     # 50 for evaluation
-    
-    train_dataset = split_dataset['train'].select(range(train_size))
-    eval_dataset = split_dataset['test'].select(range(eval_size))
+    try:
+        download_config = DownloadConfig(
+            max_retries=3,
+            num_proc=1,
+            resume_download=True
+        )
+        
+        dataset = download_with_retry(
+            load_dataset,
+            dataset_name,
+            split="train",
+            cache_dir=cache_dir,
+            download_config=download_config
+        )
+        
+        dataset = dataset.shuffle(seed=42)
+        split_dataset = dataset.train_test_split(test_size=0.1, seed=42)
+        
+        train_size = min(500, len(split_dataset['train']))
+        eval_size = min(50, len(split_dataset['test']))
+        
+        train_dataset = split_dataset['train'].select(range(train_size))
+        eval_dataset = split_dataset['test'].select(range(eval_size))
+        
+    except Exception as e:
+        print(f"Failed to load dataset from HuggingFace: {e}")
+        print("Using synthetic data instead...")
+        
+        dataset = create_synthetic_cover_letters(600)
+        split_dataset = dataset.train_test_split(test_size=0.1, seed=42)
+        train_dataset = split_dataset['train']
+        eval_dataset = split_dataset['test']
     
     def process_example(example):
         job_title = example.get('Job Title', 'Unknown Position')
@@ -167,18 +250,45 @@ def train_cover_letter_model(output_dir, optimized=False):
     MODEL_ID = "gpt2"
     CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
 
+    # Set cache for Kaggle
+    if "/kaggle/working" in os.getcwd():
+        CACHE_DIR = "/kaggle/working/cache"
+        os.makedirs(CACHE_DIR, exist_ok=True)
+
     train_dataset, eval_dataset = prepare_cover_letter_data("ShashiVish/cover-letter-dataset", CACHE_DIR)
     
-    tokenizer = GPT2Tokenizer.from_pretrained(MODEL_ID, cache_dir=CACHE_DIR)
+    try:
+        tokenizer = download_with_retry(
+            GPT2Tokenizer.from_pretrained,
+            MODEL_ID,
+            cache_dir=CACHE_DIR
+        )
+    except Exception as e:
+        print(f"Failed to download tokenizer: {e}")
+        print("Attempting to use offline mode...")
+        tokenizer = GPT2Tokenizer.from_pretrained(MODEL_ID, cache_dir=CACHE_DIR, local_files_only=True)
+    
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
     
-    model = GPT2LMHeadModel.from_pretrained(
-        MODEL_ID,
-        cache_dir=CACHE_DIR,
-        torch_dtype=torch.float16,
-        device_map="auto"
-    )
+    try:
+        model = download_with_retry(
+            GPT2LMHeadModel.from_pretrained,
+            MODEL_ID,
+            cache_dir=CACHE_DIR,
+            torch_dtype=torch.float16,
+            device_map="auto"
+        )
+    except Exception as e:
+        print(f"Failed to download model: {e}")
+        print("Attempting to use offline mode...")
+        model = GPT2LMHeadModel.from_pretrained(
+            MODEL_ID,
+            cache_dir=CACHE_DIR,
+            torch_dtype=torch.float16,
+            device_map="auto",
+            local_files_only=True
+        )
     
     model.config.use_cache = False
     
@@ -314,17 +424,46 @@ def train_interview_model(output_dir, optimized=False):
     
     MODEL_ID = "gpt2"
 
+    # Set cache for Kaggle
+    CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
+    if "/kaggle/working" in os.getcwd():
+        CACHE_DIR = "/kaggle/working/cache"
+        os.makedirs(CACHE_DIR, exist_ok=True)
+
     train_dataset, eval_dataset = prepare_interview_data("synthetic")
     
-    tokenizer = GPT2Tokenizer.from_pretrained(MODEL_ID)
+    try:
+        tokenizer = download_with_retry(
+            GPT2Tokenizer.from_pretrained,
+            MODEL_ID,
+            cache_dir=CACHE_DIR
+        )
+    except Exception as e:
+        print(f"Failed to download tokenizer: {e}")
+        print("Attempting to use offline mode...")
+        tokenizer = GPT2Tokenizer.from_pretrained(MODEL_ID, cache_dir=CACHE_DIR, local_files_only=True)
+    
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
     
-    model = GPT2LMHeadModel.from_pretrained(
-        MODEL_ID,
-        torch_dtype=torch.float16,
-        device_map="auto"
-    )
+    try:
+        model = download_with_retry(
+            GPT2LMHeadModel.from_pretrained,
+            MODEL_ID,
+            cache_dir=CACHE_DIR,
+            torch_dtype=torch.float16,
+            device_map="auto"
+        )
+    except Exception as e:
+        print(f"Failed to download model: {e}")
+        print("Attempting to use offline mode...")
+        model = GPT2LMHeadModel.from_pretrained(
+            MODEL_ID,
+            cache_dir=CACHE_DIR,
+            torch_dtype=torch.float16,
+            device_map="auto",
+            local_files_only=True
+        )
     
     model.config.use_cache = False
 
