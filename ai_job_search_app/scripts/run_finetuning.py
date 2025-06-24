@@ -67,7 +67,7 @@ Generate a professional cover letter based on the following job details and cand
 <start_of_turn>model
 {data_point.get('Cover Letter', 'N/A')}<end_of_turn>"""
 
-def train_cover_letter_model(output_dir):
+def train_cover_letter_model(output_dir, optimized=False):
     """Fine-tunes the cover letter generation model with state-of-the-art optimization techniques."""
     MODEL_ID = "Qwen/Qwen2.5-3B-Instruct"  # Smaller model to fit in Kaggle's 16GB GPU
     CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
@@ -80,35 +80,77 @@ def train_cover_letter_model(output_dir):
     model = AutoModelForCausalLM.from_pretrained(MODEL_ID, quantization_config=bnb_config, device_map="auto", cache_dir=CACHE_DIR)
 
     # Qwen2.5 specific target modules for LoRA
-    lora_config = get_lora_config(r=16, lora_alpha=32, target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"], lora_dropout=0.05)
+    if optimized:
+        # More aggressive regularization for optimized version
+        lora_config = get_lora_config(r=8, lora_alpha=16, target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"], lora_dropout=0.1)
+    else:
+        lora_config = get_lora_config(r=16, lora_alpha=32, target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"], lora_dropout=0.05)
+    
     model = prepare_model_for_kbit_training(model)
     model = get_peft_model(model, lora_config)
 
-    training_args = TrainingArguments(
-        output_dir=output_dir,
-        per_device_train_batch_size=1,  # Keep small for memory
-        per_device_eval_batch_size=1,   # Small eval batch size
-        gradient_accumulation_steps=8,  # Maintain effective batch size
-        learning_rate=1e-4,
-        num_train_epochs=2,  # Reduced epochs to prevent OOM
-        logging_steps=10,
-        eval_strategy="steps",  # Updated parameter name
-        eval_steps=50,
-        save_strategy="steps",
-        save_total_limit=1,  # Keep only 1 checkpoint to save memory
-        load_best_model_at_end=False,  # Disable to save memory
-        report_to="none",
-        fp16=True,
-        dataloader_pin_memory=False,
-        dataloader_num_workers=0,  # Reduce CPU memory usage
-        weight_decay=0.01,
-        warmup_ratio=0.1,
-        lr_scheduler_type="cosine",
-        optim="adamw_torch",
-        gradient_checkpointing=True,  # Trade compute for memory
-        remove_unused_columns=True,   # Remove unused data columns
-        max_grad_norm=1.0  # Gradient clipping
-    )
+    if optimized:
+        # Optimized training arguments to prevent overfitting
+        training_args = TrainingArguments(
+            output_dir=output_dir,
+            per_device_train_batch_size=1,
+            per_device_eval_batch_size=1,
+            gradient_accumulation_steps=8,
+            learning_rate=5e-5,  # Lower learning rate
+            num_train_epochs=1,  # Single epoch to prevent overfitting
+            logging_steps=10,
+            eval_strategy="steps",
+            eval_steps=25,  # More frequent evaluation
+            save_strategy="steps",
+            save_steps=50,
+            save_total_limit=2,
+            load_best_model_at_end=True,  # Load best model based on eval loss
+            metric_for_best_model="eval_loss",
+            greater_is_better=False,
+            report_to="none",
+            fp16=True,
+            dataloader_pin_memory=False,
+            dataloader_num_workers=0,
+            weight_decay=0.05,  # Increased weight decay
+            warmup_ratio=0.05,  # Reduced warmup
+            lr_scheduler_type="cosine",
+            optim="adamw_torch",
+            gradient_checkpointing=True,
+            remove_unused_columns=True,
+            max_grad_norm=0.5,  # Stricter gradient clipping
+            dataloader_drop_last=True,  # Drop incomplete batches
+        )
+        
+        # Add early stopping callback
+        callbacks = [EarlyStoppingCallback(early_stopping_patience=3, early_stopping_threshold=0.01)]
+    else:
+        # Original training arguments
+        training_args = TrainingArguments(
+            output_dir=output_dir,
+            per_device_train_batch_size=1,
+            per_device_eval_batch_size=1,
+            gradient_accumulation_steps=8,
+            learning_rate=1e-4,
+            num_train_epochs=2,
+            logging_steps=10,
+            eval_strategy="steps",
+            eval_steps=50,
+            save_strategy="steps",
+            save_total_limit=1,
+            load_best_model_at_end=False,
+            report_to="none",
+            fp16=True,
+            dataloader_pin_memory=False,
+            dataloader_num_workers=0,
+            weight_decay=0.01,
+            warmup_ratio=0.1,
+            lr_scheduler_type="cosine",
+            optim="adamw_torch",
+            gradient_checkpointing=True,
+            remove_unused_columns=True,
+            max_grad_norm=1.0
+        )
+        callbacks = []
 
     trainer = SFTTrainer(
         model=model,
@@ -119,8 +161,9 @@ def train_cover_letter_model(output_dir):
         dataset_text_field="Cover Letter",
         tokenizer=tokenizer,
         packing=True,
-        max_seq_length=512,  # Reduced to save memory
+        max_seq_length=512,
         formatting_func=format_cover_letter_prompt,
+        callbacks=callbacks,
     )
 
     trainer.train()
@@ -192,7 +235,7 @@ Experienced professional with relevant skills and background in the field.
     
     return split_dataset['train'], split_dataset['test']
 
-def train_interview_model(output_dir):
+def train_interview_model(output_dir, optimized=False):
     """Fine-tunes the interview question generation model with state-of-the-art optimization techniques."""
     MODEL_ID = "microsoft/DialoGPT-medium"  # Non-gated alternative that works well
 
@@ -205,35 +248,77 @@ def train_interview_model(output_dir):
     model.config.use_cache = False
 
     # DialoGPT specific target modules for LoRA
-    lora_config = get_lora_config(r=16, lora_alpha=32, target_modules=["c_attn", "c_proj"], lora_dropout=0.05)
+    if optimized:
+        # More aggressive regularization for optimized version
+        lora_config = get_lora_config(r=8, lora_alpha=16, target_modules=["c_attn", "c_proj"], lora_dropout=0.1)
+    else:
+        lora_config = get_lora_config(r=16, lora_alpha=32, target_modules=["c_attn", "c_proj"], lora_dropout=0.05)
+    
     model = prepare_model_for_kbit_training(model)
     model = get_peft_model(model, lora_config)
 
-    training_args = TrainingArguments(
-        output_dir=output_dir,
-        per_device_train_batch_size=2,  # Can use larger batch for smaller model
-        per_device_eval_batch_size=2,
-        gradient_accumulation_steps=4,
-        learning_rate=1e-4,
-        logging_steps=10,
-        max_steps=200,  # Reasonable training steps
-        eval_strategy="steps",  # Updated parameter name
-        eval_steps=30,
-        save_strategy="steps",
-        save_total_limit=1,
-        load_best_model_at_end=False,  # Save memory
-        report_to="none",
-        fp16=True,
-        dataloader_pin_memory=False,
-        dataloader_num_workers=0,
-        weight_decay=0.01,
-        warmup_ratio=0.1,
-        lr_scheduler_type="cosine",
-        optim="adamw_torch",
-        gradient_checkpointing=True,
-        remove_unused_columns=True,
-        max_grad_norm=1.0
-    )
+    if optimized:
+        # Optimized training arguments to prevent severe overfitting
+        training_args = TrainingArguments(
+            output_dir=output_dir,
+            per_device_train_batch_size=2,
+            per_device_eval_batch_size=2,
+            gradient_accumulation_steps=4,
+            learning_rate=5e-5,  # Lower learning rate
+            max_steps=50,  # Much fewer steps to prevent overfitting
+            logging_steps=5,
+            eval_strategy="steps",
+            eval_steps=10,  # More frequent evaluation
+            save_strategy="steps",
+            save_steps=15,
+            save_total_limit=2,
+            load_best_model_at_end=True,  # Load best model
+            metric_for_best_model="eval_loss",
+            greater_is_better=False,
+            report_to="none",
+            fp16=True,
+            dataloader_pin_memory=False,
+            dataloader_num_workers=0,
+            weight_decay=0.05,  # Increased weight decay
+            warmup_ratio=0.1,
+            lr_scheduler_type="cosine",
+            optim="adamw_torch",
+            gradient_checkpointing=True,
+            remove_unused_columns=True,
+            max_grad_norm=0.5,  # Stricter gradient clipping
+            dataloader_drop_last=True,
+        )
+        
+        # Add early stopping callback
+        callbacks = [EarlyStoppingCallback(early_stopping_patience=2, early_stopping_threshold=0.01)]
+    else:
+        # Original training arguments
+        training_args = TrainingArguments(
+            output_dir=output_dir,
+            per_device_train_batch_size=2,
+            per_device_eval_batch_size=2,
+            gradient_accumulation_steps=4,
+            learning_rate=1e-4,
+            logging_steps=10,
+            max_steps=200,
+            eval_strategy="steps",
+            eval_steps=30,
+            save_strategy="steps",
+            save_total_limit=1,
+            load_best_model_at_end=False,
+            report_to="none",
+            fp16=True,
+            dataloader_pin_memory=False,
+            dataloader_num_workers=0,
+            weight_decay=0.01,
+            warmup_ratio=0.1,
+            lr_scheduler_type="cosine",
+            optim="adamw_torch",
+            gradient_checkpointing=True,
+            remove_unused_columns=True,
+            max_grad_norm=1.0
+        )
+        callbacks = []
 
     trainer = SFTTrainer(
         model=model,
@@ -242,9 +327,10 @@ def train_interview_model(output_dir):
         eval_dataset=eval_dataset,
         peft_config=lora_config,
         dataset_text_field="text",
-        max_seq_length=256,  # Smaller for memory efficiency
+        max_seq_length=256,
         tokenizer=tokenizer,
-        packing=True
+        packing=True,
+        callbacks=callbacks,
     )
     
     trainer.train()
@@ -281,6 +367,11 @@ def main():
         type=str,
         help="Hugging Face token for authentication (overrides environment variables)"
     )
+    parser.add_argument(
+        "--optimized",
+        action="store_true",
+        help="Use optimized training parameters to reduce overfitting"
+    )
     args = parser.parse_args()
 
     # --- Hugging Face Login ---
@@ -304,13 +395,18 @@ def main():
         print("WARNING: No Hugging Face token found. Pre-trained model downloads may fail.")
         print("Please provide HF_TOKEN via --hf_token argument or set in Kaggle Secrets.")
 
+    # Print optimization status
+    if args.optimized:
+        print("🎯 OPTIMIZED MODE: Using regularization techniques to prevent overfitting")
+    else:
+        print("📊 STANDARD MODE: Using original training parameters")
 
     if args.model_type == "cover_letter":
         print("--- Starting Cover Letter Model Fine-Tuning ---")
-        train_cover_letter_model(args.output_dir)
+        train_cover_letter_model(args.output_dir, optimized=args.optimized)
     elif args.model_type == "interview":
         print("--- Starting Interview Model Fine-Tuning ---")
-        train_interview_model(args.output_dir)
+        train_interview_model(args.output_dir, optimized=args.optimized)
     else:
         print("Invalid model type specified.")
 
