@@ -11,7 +11,7 @@ try:
     from datasets import load_dataset, Dataset, DownloadConfig
     from transformers import (
         AutoModelForCausalLM, 
-        AutoTokenizer,
+        AutoTokenizer, 
         GPT2LMHeadModel,
         GPT2Tokenizer,
         BitsAndBytesConfig, 
@@ -303,7 +303,7 @@ def train_cover_letter_model(output_dir, optimized=False):
         )
     
     model.config.use_cache = False
-    
+
     if optimized:
         # Adjusted to prevent overfitting with higher dropout and regularization
         lora_config = get_lora_config(r=16, lora_alpha=32, lora_dropout=0.15)
@@ -383,135 +383,216 @@ def train_cover_letter_model(output_dir, optimized=False):
 
 # --- Interview Question Model ---
 
-def prepare_interview_data_improved(dataset_name):
-    """Generate higher quality interview data with better structure"""
+def prepare_interview_data_comprehensive(dataset_name):
+    """Generate comprehensive interview data with much more variety"""
     set_random_seeds(42)
     
-    # Simpler, more focused Q&A pairs
-    basic_questions = [
+    # Expanded behavioral questions with more variety
+    behavioral_questions = [
         {
             "q": "Tell me about yourself.",
-            "a": "I'm a software engineer with 5 years of experience in full-stack development. I specialize in React and Node.js, and I'm passionate about building scalable web applications. In my current role, I've led several successful projects that improved user engagement by 40%."
+            "variations": [
+                "I'm a software engineer with 5 years of experience in full-stack development. I specialize in React and Node.js, and I'm passionate about building scalable web applications. In my current role, I've led several successful projects that improved user engagement by 40%.",
+                "I'm a passionate developer with expertise in modern web technologies. I have 4 years of experience building enterprise applications and have led cross-functional teams. I'm particularly interested in performance optimization and user experience.",
+                "I'm a full-stack developer with a strong background in JavaScript and Python. I've worked on everything from small startups to large-scale enterprise systems. I enjoy solving complex problems and mentoring junior developers.",
+                "I'm an experienced software engineer specializing in backend systems and API design. I have 6 years of experience working with microservices and cloud technologies. I'm passionate about writing clean, maintainable code.",
+                "I'm a versatile developer with experience across multiple technologies and domains. I've worked in fintech, healthcare, and e-commerce, always focusing on delivering high-quality solutions that meet business needs.",
+                # Additional variations for more diversity
+                "I'm a senior software engineer with 8 years of experience building distributed systems and cloud applications. I've led engineering teams of 5-10 people and have deep expertise in both frontend and backend technologies. I'm particularly interested in system architecture and performance optimization.",
+                "I'm a data-driven developer with 6 years of experience in both web development and data science. I specialize in building applications that handle large datasets and provide actionable insights. I've worked extensively with Python, JavaScript, and machine learning frameworks.",
+                "I'm a full-stack engineer with expertise in modern web technologies and DevOps practices. I have 7 years of experience building scalable applications and implementing CI/CD pipelines. I'm passionate about code quality, testing, and automation."
+            ]
         },
         {
             "q": "Why do you want to work here?",
-            "a": "I'm impressed by your company's commitment to innovation and the impact your products have on users. The role aligns perfectly with my skills in cloud architecture and my goal to work on large-scale systems. I believe I can contribute significantly to your engineering team."
+            "variations": [
+                "I'm impressed by your company's commitment to innovation and the impact your products have on millions of users. The role aligns perfectly with my skills in cloud architecture and my goal to work on large-scale distributed systems.",
+                "Your company's reputation for technical excellence and engineering culture really appeals to me. I'm excited about the opportunity to work on challenging problems at scale and contribute to products that make a real difference.",
+                "I've been following your company's work in AI and machine learning, and I'm excited about the opportunity to contribute to these cutting-edge projects. The role matches my background and career aspirations perfectly.",
+                "Your company's focus on engineering excellence and innovation is exactly what I'm looking for. I want to work with talented engineers on meaningful projects that have global impact.",
+                "I'm drawn to your company's mission and the opportunity to work on products that solve real problems. The technical challenges you face align with my interests in scalable systems and performance optimization.",
+                # Additional variations
+                "I've always admired your company's approach to building products that truly serve users' needs. The role offers the perfect combination of technical challenges and meaningful impact that I'm looking for in my next position.",
+                "Your company's commitment to open source and developer community really resonates with me. I want to work somewhere that values knowledge sharing and continuous learning, and I see that culture here.",
+                "I'm particularly excited about your company's work in emerging technologies. The opportunity to work on cutting-edge projects while learning from industry experts is exactly what I need to advance my career."
+            ]
         },
         {
             "q": "What are your strengths?",
-            "a": "My key strengths are problem-solving and communication. I excel at breaking down complex technical problems into manageable solutions. I also have a talent for explaining technical concepts to non-technical stakeholders, which has been valuable in cross-functional projects."
+            "variations": [
+                "My key strengths are problem-solving and system design. I excel at breaking down complex technical problems into manageable components and designing scalable solutions. I also have strong communication skills that help me work effectively with cross-functional teams.",
+                "I'm particularly strong in debugging and optimization. I have a methodical approach to identifying performance bottlenecks and finding root causes of issues. I also pride myself on writing clean, well-documented code.",
+                "My strengths include technical leadership and mentoring. I enjoy helping junior developers grow and leading technical discussions. I'm also skilled at translating business requirements into technical solutions.",
+                "I have strong analytical skills and attention to detail. I'm good at seeing the big picture while also focusing on implementation details. I also have experience with agile methodologies and project management.",
+                "My main strengths are adaptability and continuous learning. I quickly pick up new technologies and frameworks. I also have strong collaboration skills and work well in diverse, multicultural teams.",
+                # Additional variations
+                "I'm particularly strong at code architecture and design patterns. I have a good eye for identifying when code can be refactored for better maintainability and I enjoy creating reusable components and libraries.",
+                "My strengths include cross-functional collaboration and stakeholder management. I'm good at understanding business requirements and translating them into technical specifications that development teams can execute on.",
+                "I excel at performance optimization and scalability challenges. I have experience with profiling applications, identifying bottlenecks, and implementing solutions that can handle increased load and user growth."
+            ]
         },
         {
-            "q": "What are your weaknesses?",
-            "a": "I sometimes spend too much time perfecting code details. I've learned to balance perfectionism with deadlines by setting clear priorities and using code reviews to ensure quality without over-engineering."
-        },
-        {
-            "q": "Where do you see yourself in 5 years?",
-            "a": "I see myself as a technical lead or architect, mentoring junior developers and driving technical decisions. I want to deepen my expertise in distributed systems and contribute to open-source projects in my field."
-        },
-        {
-            "q": "Describe a challenging project.",
-            "a": "I led the migration of a monolithic application to microservices, serving 1M+ users. The challenge was maintaining zero downtime. We implemented a phased approach with careful testing, resulting in improved performance and easier maintenance."
-        },
-        {
-            "q": "How do you handle pressure?",
-            "a": "I handle pressure by staying organized and maintaining clear communication. I break large tasks into smaller milestones and prioritize based on impact. Regular check-ins with the team help identify issues early."
-        },
-        {
-            "q": "Why are you leaving your current job?",
-            "a": "I'm looking for new challenges and growth opportunities. While I've learned a lot in my current role, I'm ready to work on larger-scale projects and expand my skills in cloud technologies and system design."
-        },
-        {
-            "q": "What motivates you?",
-            "a": "I'm motivated by solving complex problems and seeing the real-world impact of my work. Building products that users love and working with talented teams energizes me. Continuous learning is also a key driver."
-        },
-        {
-            "q": "How do you stay updated with technology?",
-            "a": "I follow tech blogs, participate in online communities, and work on side projects. I also attend conferences and take online courses. Recently, I've been exploring Rust and WebAssembly for performance-critical applications."
+            "q": "Describe a challenging project you worked on.",
+            "variations": [
+                "I led the migration of a legacy monolithic system to microservices architecture for a high-traffic e-commerce platform. The main challenge was ensuring zero downtime during the transition while maintaining data consistency. We used blue-green deployment and feature flags, resulting in 50% improved performance.",
+                "I worked on optimizing a real-time analytics system that was struggling with latency issues. The challenge was processing millions of events per second while maintaining sub-100ms response times. I redesigned the data pipeline using Kafka and Redis, achieving 80% latency reduction.",
+                "I built a distributed task processing system that needed to handle varying workloads efficiently. The challenge was auto-scaling based on queue depth while maintaining cost efficiency. I implemented a custom scheduler that reduced processing time by 60% and cut costs by 40%.",
+                "I led the development of a new authentication system that needed to integrate with multiple legacy systems. The challenge was maintaining security while ensuring smooth user experience. We implemented OAuth 2.0 with custom adapters, improving security while reducing login friction.",
+                "I worked on a data migration project involving petabytes of data with strict downtime requirements. The challenge was ensuring data integrity while minimizing business impact. We developed a custom ETL pipeline that completed the migration 2 weeks ahead of schedule.",
+                # Additional variations
+                "I architected and implemented a real-time notification system that needed to handle millions of push notifications daily. The challenge was ensuring reliable delivery across multiple platforms while maintaining low latency. I designed a fault-tolerant system using message queues and circuit breakers.",
+                "I led the implementation of a new search engine for our e-commerce platform. The challenge was improving search relevance while maintaining fast response times. I implemented Elasticsearch with custom ranking algorithms, resulting in 35% improved conversion rates.",
+                "I worked on a critical performance optimization project for our main application. The system was experiencing frequent timeouts under heavy load. I implemented caching strategies, optimized database queries, and redesigned the architecture, resulting in 70% improvement in response times."
+            ]
         }
     ]
     
-    # Technical questions for common skills
-    technical_templates = [
+    # Expanded technical deep-dive questions
+    technical_deep_dive = [
         {
-            "skill": "Python",
-            "qa_pairs": [
-                ("What's your experience with Python?", "I have 4 years of Python experience, primarily in backend development with Django and FastAPI. I've built RESTful APIs, data pipelines, and automation scripts. I'm comfortable with async programming and have experience with data science libraries."),
-                ("How do you optimize Python code?", "I use profiling tools to identify bottlenecks, implement caching strategies, and leverage built-in functions. I also consider using NumPy for numerical operations and multiprocessing for CPU-bound tasks."),
+            "topic": "System Design",
+            "questions": [
+                ("How would you design a URL shortener like bit.ly?", "I'd start with requirements analysis: handling millions of URLs, fast redirects, and analytics. The core components would be a URL encoding service, database for mappings, cache layer for performance, and analytics service. I'd use base62 encoding for short URLs, Redis for caching hot URLs, and a load balancer for high availability."),
+                ("Design a chat application for millions of users.", "Key components: WebSocket servers for real-time messaging, message queue for reliability, user service for authentication, and database for message persistence. I'd use horizontal sharding for the database, implement message acknowledgments, and use CDN for media sharing. Load balancing would distribute WebSocket connections."),
+                ("How would you design a recommendation system?", "I'd use a hybrid approach combining collaborative filtering and content-based filtering. The system would have data collection, feature engineering, model training, and serving components. I'd implement A/B testing for model evaluation and use real-time user interactions to update recommendations continuously."),
+                ("Design a social media feed system.", "I'd design a system with user service, post service, feed generation service, and notification service. For feed generation, I'd use a pull model for active users and push model for less active ones. I'd implement caching at multiple levels and use CDN for media content. Database would be sharded by user ID."),
+                ("How would you design a ride-sharing service like Uber?", "Core components: user service, driver service, trip service, location service, and payment service. I'd use geospatial indexing for location queries, implement real-time tracking with WebSockets, and use event-driven architecture for trip state management. Machine learning would optimize driver-rider matching."),
+                ("Design a video streaming platform like YouTube.", "Key components: video upload service, encoding service, metadata service, search service, and content delivery network. I'd use distributed storage for videos, implement adaptive bitrate streaming, and use machine learning for recommendations. Global CDN would ensure low latency worldwide."),
             ]
         },
         {
-            "skill": "JavaScript",
-            "qa_pairs": [
-                ("Describe your JavaScript experience.", "I have extensive experience with modern JavaScript, including ES6+ features. I've built SPAs with React, server-side applications with Node.js, and have strong knowledge of asynchronous programming patterns."),
-                ("How do you handle JavaScript performance?", "I focus on minimizing DOM manipulation, using debouncing/throttling for events, implementing lazy loading, and optimizing bundle sizes. I also use performance profiling tools in Chrome DevTools."),
+            "topic": "Algorithms & Data Structures",
+            "questions": [
+                ("Explain how you would implement a LRU cache.", "I'd use a combination of HashMap and doubly-linked list. The HashMap provides O(1) access, while the linked list maintains the order of access. When accessing an item, I move it to the head. When the cache is full, I remove from the tail. Both get and put operations are O(1)."),
+                ("How would you find the median in a stream of integers?", "I'd use two heaps: a max heap for the smaller half and a min heap for the larger half. I maintain the property that the max heap size is either equal to or one more than the min heap size. The median is either the top of the max heap or the average of both heap tops."),
+                ("Describe an efficient way to detect cycles in a linked list.", "I'd use Floyd's cycle detection algorithm (tortoise and hare). Use two pointers: slow moves one step, fast moves two steps. If there's a cycle, they'll eventually meet. If fast reaches null, there's no cycle. This is O(n) time and O(1) space."),
+                ("How would you implement a thread-safe counter?", "I'd use atomic operations or synchronization mechanisms like locks. For high-performance scenarios, I might use compare-and-swap operations or lock-free data structures. The choice depends on contention levels and performance requirements."),
+                ("Explain how to implement a distributed hash table.", "I'd use consistent hashing to distribute keys across nodes. Each node would be responsible for range of hash values. For fault tolerance, I'd replicate data across multiple nodes. When nodes join or leave, I'd redistribute only the affected range of keys."),
+                ("How would you design a rate limiter?", "I'd use algorithms like token bucket or sliding window. Token bucket allows burst traffic while maintaining average rate. I'd implement it using Redis with atomic operations for distributed systems. Different rate limits could be applied per user, IP, or API key."),
             ]
         },
         {
-            "skill": "SQL",
-            "qa_pairs": [
-                ("What's your SQL expertise?", "I'm proficient in writing complex queries, optimizing database performance, and designing schemas. I have experience with PostgreSQL and MySQL, including stored procedures, indexing strategies, and query optimization."),
-                ("How do you optimize SQL queries?", "I analyze query execution plans, create appropriate indexes, avoid N+1 queries, and use EXPLAIN to understand performance. I also consider denormalization when appropriate and implement caching strategies."),
-            ]
-        },
-        {
-            "skill": "System Design",
-            "qa_pairs": [
-                ("How do you approach system design?", "I start by understanding requirements and constraints, then design high-level architecture. I consider scalability, reliability, and maintainability. I use design patterns and focus on loose coupling between components."),
-                ("Describe a system you've designed.", "I designed a real-time notification system handling millions of events daily. Used message queues for decoupling, Redis for caching, and implemented circuit breakers for fault tolerance. The system scales horizontally."),
+            "topic": "Database Design",
+            "questions": [
+                ("How would you optimize a slow database query?", "I'd start by analyzing the execution plan to identify bottlenecks. Common optimizations include adding indexes, rewriting queries to avoid full table scans, partitioning large tables, and denormalizing for read-heavy workloads. I'd also consider caching frequently accessed data."),
+                ("Explain database indexing strategies.", "Indexes speed up read operations but slow down writes. I'd use B-tree indexes for range queries, hash indexes for equality checks, and composite indexes for multi-column searches. I'd avoid over-indexing and regularly analyze index usage to remove unused ones."),
+                ("How would you design a database schema for an e-commerce system?", "I'd have tables for users, products, categories, orders, order_items, and payments. I'd normalize to reduce redundancy but denormalize for performance where needed. I'd use foreign keys for referential integrity and indexes on commonly queried columns."),
+                ("Explain ACID properties in databases.", "Atomicity ensures transactions are all-or-nothing. Consistency maintains data integrity. Isolation prevents transactions from interfering with each other. Durability ensures committed transactions survive system failures. These properties are crucial for data reliability."),
             ]
         }
+    ]
+    
+    # Expanded behavioral STAR format questions
+    star_questions = [
+        {
+            "q": "Tell me about a time you had to learn a new technology quickly.",
+            "a": "Situation: Our team needed to migrate to GraphQL but no one had experience with it. Task: I had to become proficient in 2 weeks to lead the migration. Action: I created a learning plan, built several prototypes, and shared knowledge with the team through daily sessions. Result: We successfully migrated all APIs to GraphQL, improving query efficiency by 30% and reducing over-fetching."
+        },
+        {
+            "q": "Describe a situation where you had to work with a difficult team member.",
+            "a": "Situation: A senior developer was resistant to code review feedback and defensive about their code. Task: I needed to maintain team harmony while ensuring code quality. Action: I scheduled a private conversation to understand their concerns and worked together to establish clear code standards. Result: They became more receptive to feedback and our code review process improved significantly."
+        },
+        {
+            "q": "Tell me about a time you made a mistake and how you handled it.",
+            "a": "Situation: I accidentally deployed a breaking change to production that affected 20% of users. Task: I needed to fix the issue quickly and prevent future occurrences. Action: I immediately rolled back the deployment, communicated with stakeholders, and implemented better testing procedures. Result: We reduced deployment issues by 90% and I became more careful about testing edge cases."
+        },
+        {
+            "q": "Describe a time you improved a process or system.",
+            "a": "Situation: Our deployment process was taking 2 hours and often failed. Task: I was asked to improve deployment reliability and speed. Action: I automated the entire pipeline using CI/CD, added comprehensive testing, and implemented rollback mechanisms. Result: Deployment time reduced to 15 minutes with 99% success rate, and developer productivity increased significantly."
+        },
+        {
+            "q": "Tell me about a time you had to meet a tight deadline.",
+            "a": "Situation: We had to deliver a critical feature for a major client in half the planned time due to a changed launch date. Task: I needed to lead the team to deliver quality code under pressure. Action: I broke down the work into smaller tasks, coordinated parallel development, and set up daily standups for quick issue resolution. Result: We delivered the feature on time with full functionality and minimal bugs."
+        },
+        {
+            "q": "Describe a situation where you had to convince others of your technical approach.",
+            "a": "Situation: The team wanted to use a popular but resource-heavy framework for our new project. Task: I needed to convince them that a lighter alternative would be better for our use case. Action: I created a proof of concept, analyzed performance metrics, and presented a detailed comparison. Result: The team adopted my approach, resulting in 40% faster load times and reduced infrastructure costs."
+        },
+        {
+            "q": "Tell me about a time you had to deal with ambiguous requirements.",
+            "a": "Situation: I was asked to build a 'flexible reporting system' with minimal specifications. Task: I needed to clarify requirements and deliver a useful solution. Action: I interviewed stakeholders, created mockups, and iteratively refined the requirements through feedback sessions. Result: We delivered a configurable reporting system that met all stakeholder needs and is still in use today."
+        },
+        {
+            "q": "Describe a time you mentored someone.",
+            "a": "Situation: A junior developer joined our team with limited experience in our tech stack. Task: I was asked to help them become productive quickly. Action: I created a learning plan, paired with them on tasks, and provided regular feedback and encouragement. Result: They became a valuable team member within 3 months and now mentors other junior developers."
+        }
+    ]
+    
+    # Expanded industry-specific questions
+    industry_questions = [
+        ("How do you ensure code quality?", "I use multiple approaches: comprehensive testing including unit, integration, and end-to-end tests; code reviews with clear standards; static analysis tools; and continuous integration. I also practice TDD when appropriate and maintain high test coverage. Documentation and clean code principles are equally important."),
+        ("How do you handle technical debt?", "I track technical debt systematically and prioritize it based on business impact. I allocate 20% of sprint capacity to address debt, advocate for refactoring during feature development, and maintain a debt register. I also ensure stakeholders understand the long-term costs of accumulating debt."),
+        ("Describe your debugging process.", "I start by reproducing the issue consistently, then gather relevant logs and stack traces. I use binary search to narrow down the problem area and leverage debugging tools and profilers. I document findings and implement fixes with proper testing. Prevention is key, so I also analyze root causes."),
+        ("How do you stay current with technology trends?", "I follow tech blogs, participate in developer communities, attend conferences, and work on side projects. I also contribute to open source when possible and take online courses. I focus on understanding fundamentals rather than chasing every new framework."),
+        ("How do you approach performance optimization?", "I start by establishing baselines and identifying bottlenecks through profiling. I prioritize optimizations based on impact and implement them incrementally. I consider all layers: database queries, application logic, caching, and infrastructure. Monitoring is crucial to measure improvements."),
+        ("Explain your approach to API design.", "I follow RESTful principles and design APIs that are intuitive and consistent. I use proper HTTP methods and status codes, implement versioning from the start, and provide comprehensive documentation. I also consider pagination, rate limiting, and authentication from the beginning."),
+        ("How do you handle production incidents?", "I follow a structured incident response process: immediate mitigation to reduce impact, root cause analysis to understand what happened, and implementation of preventive measures. Communication with stakeholders throughout is crucial. I also conduct post-mortems to learn from incidents."),
+        ("What's your approach to testing?", "I use a testing pyramid approach: many unit tests, fewer integration tests, and minimal end-to-end tests. I write tests first when doing TDD, and I ensure tests are fast, reliable, and maintainable. I also use mocking appropriately and test edge cases."),
+        ("How do you approach software architecture decisions?", "I consider multiple factors: scalability requirements, team expertise, maintenance burden, and business constraints. I document architectural decisions and their rationale. I prefer simple solutions that can evolve over time rather than over-engineered systems."),
+        ("Describe your experience with cloud technologies.", "I have experience with AWS/Azure/GCP services including compute, storage, databases, and networking. I understand infrastructure as code, containerization with Docker/Kubernetes, and serverless architectures. I also have experience with monitoring and logging in cloud environments.")
     ]
     
     synthetic_data = []
     
-    # Add basic questions multiple times with slight variations
-    for _ in range(5):
-        for qa in basic_questions:
-            synthetic_data.append({
-                "text": f"### Human: {qa['q']}\n\n### Assistant: {qa['a']}\n\n### End"
-            })
+    # Generate behavioral questions with multiple variations (increased multiplier)
+    for qa in behavioral_questions:
+        for variation in qa["variations"]:
+            for _ in range(3):  # Triple each variation for more training data
+                synthetic_data.append({
+                    "text": f"### Human: {qa['q']}\n\n### Assistant: {variation}\n\n### End"
+                })
     
-    # Add technical questions
-    for tech in technical_templates:
-        for q, a in tech["qa_pairs"]:
-            for _ in range(3):
+    # Generate technical deep-dive questions (increased multiplier)
+    for topic_data in technical_deep_dive:
+        for q, a in topic_data["questions"]:
+            for i in range(5):  # More repetitions for technical questions
                 synthetic_data.append({
                     "text": f"### Human: {q}\n\n### Assistant: {a}\n\n### End"
                 })
     
-    # Add some behavioral questions with STAR format
-    star_questions = [
-        {
-            "q": "Tell me about a time you disagreed with a colleague.",
-            "a": "Situation: A colleague wanted to use a new framework for a critical project. Task: I needed to evaluate if it was the right choice. Action: I proposed a proof-of-concept to test both options. Result: We found the existing solution was more suitable, saving time and reducing risk."
-        },
-        {
-            "q": "Describe a time you failed.",
-            "a": "Situation: I underestimated the complexity of a data migration project. Task: Had to migrate millions of records with minimal downtime. Action: After initial issues, I redesigned the approach with better testing. Result: Learned the importance of thorough planning and testing, which I apply to all projects now."
-        },
-        {
-            "q": "Give an example of leadership.",
-            "a": "Situation: Our team was struggling with a tight deadline. Task: Needed to deliver a feature in 2 weeks. Action: I organized daily standups, broke down tasks, and helped blocked team members. Result: We delivered on time with high quality, and the process improvements continued after the project."
-        }
-    ]
-    
+    # Generate STAR format questions (increased multiplier)
     for qa in star_questions:
-        for _ in range(4):
+        for _ in range(6):  # More STAR examples
             synthetic_data.append({
                 "text": f"### Human: {qa['q']}\n\n### Assistant: {qa['a']}\n\n### End"
             })
     
-    print(f"Generated {len(synthetic_data)} high-quality interview examples")
+    # Generate industry questions (increased multiplier)
+    for q, a in industry_questions:
+        for _ in range(8):  # More industry-specific questions
+            synthetic_data.append({
+                "text": f"### Human: {q}\n\n### Assistant: {a}\n\n### End"
+            })
+    
+    # Add more company-specific questions with expanded variations
+    company_questions = [
+        ("Why should we hire you?", "I bring a unique combination of technical expertise and leadership experience. My track record of delivering complex projects on time, mentoring team members, and driving technical decisions makes me a strong fit. I'm passionate about your mission and excited to contribute to your continued growth."),
+        ("What interests you about this role?", "I'm excited about the technical challenges and the opportunity to work on systems at scale. The role aligns perfectly with my experience in distributed systems and my goal to drive architectural decisions. I'm also interested in mentoring junior engineers and building high-performing teams."),
+        ("What's your ideal work environment?", "I thrive in collaborative environments that value learning and innovation. I appreciate clear communication, constructive feedback, and the autonomy to make technical decisions. I also value work-life balance and opportunities for professional growth."),
+        ("How do you handle disagreements with management?", "I approach disagreements with data and clear reasoning. I present alternative solutions with their trade-offs and business impact. If management has different priorities, I align with their decision while documenting my concerns. Open communication and mutual respect are key."),
+        ("Where do you see yourself in 5 years?", "I see myself in a technical leadership role where I can influence architectural decisions and mentor other engineers. I want to continue growing my expertise in distributed systems and contribute to building products that have significant impact on users and business."),
+        ("What's your biggest weakness?", "I sometimes spend too much time perfecting code architecture when simpler solutions would work. I've learned to balance technical excellence with delivery timelines by setting time limits for design iterations and seeking feedback from colleagues earlier in the process."),
+        ("Why are you leaving your current job?", "I'm looking for new challenges and growth opportunities. While I've learned a lot in my current role, I'm ready to take on more complex technical problems and leadership responsibilities. This role offers the perfect opportunity to expand my skills and make a greater impact."),
+        ("How do you handle stress and pressure?", "I handle stress by staying organized and prioritizing tasks based on impact. I communicate proactively with stakeholders about timelines and potential issues. I also make sure to take breaks and maintain work-life balance to avoid burnout. Regular exercise and hobbies help me manage stress effectively.")
+    ]
+    
+    for q, a in company_questions:
+        for _ in range(7):  # More company-specific questions
+            synthetic_data.append({
+                "text": f"### Human: {q}\n\n### Assistant: {a}\n\n### End"
+            })
+    
+    print(f"Generated {len(synthetic_data)} comprehensive interview examples")
     
     random.shuffle(synthetic_data)
     
     dataset = Dataset.from_list(synthetic_data)
-    split_dataset = dataset.train_test_split(test_size=0.15, seed=42)
+    split_dataset = dataset.train_test_split(test_size=0.08, seed=42)  # Even smaller test set for more training data
     
     return split_dataset['train'], split_dataset['test']
 
-def train_interview_model(output_dir, optimized=False):
+def train_interview_model_focused(output_dir, optimized=False):
+    """Focused training specifically for interview model with comprehensive data and slower learning"""
     set_random_seeds(42)
     
     MODEL_ID = "gpt2"
@@ -521,8 +602,8 @@ def train_interview_model(output_dir, optimized=False):
         CACHE_DIR = "/kaggle/working/cache"
         os.makedirs(CACHE_DIR, exist_ok=True)
 
-    # Use improved data generation
-    train_dataset, eval_dataset = prepare_interview_data_improved("synthetic")
+    # Use comprehensive data generation
+    train_dataset, eval_dataset = prepare_interview_data_comprehensive("synthetic")
     
     try:
         tokenizer = download_with_retry(
@@ -560,57 +641,63 @@ def train_interview_model(output_dir, optimized=False):
     model.config.use_cache = False
 
     if optimized:
-        # More aggressive training for interview model
-        lora_config = get_lora_config(r=64, lora_alpha=128, lora_dropout=0.1)
+        # Much slower and more thorough training configuration
+        lora_config = get_lora_config(r=96, lora_alpha=192, lora_dropout=0.1)  # Balanced capacity
         
         training_args = TrainingArguments(
             output_dir=output_dir,
-            per_device_train_batch_size=4,
-            per_device_eval_batch_size=4,
-            gradient_accumulation_steps=2,
-            learning_rate=2e-4,  # Higher learning rate
-            num_train_epochs=6,  # More epochs
-            logging_steps=10,
+            per_device_train_batch_size=1,  # Very small batch for maximum gradient updates
+            per_device_eval_batch_size=1,
+            gradient_accumulation_steps=16,  # Larger effective batch size but more updates
+            learning_rate=1e-5,  # Much slower learning rate for gradual learning
+            num_train_epochs=15,  # Many more epochs for thorough learning
+            logging_steps=10,  # More frequent logging
             eval_strategy="steps",
-            eval_steps=25,
+            eval_steps=100,  # Less frequent evaluation to allow more training
             save_strategy="steps",
-            save_steps=50,
-            save_total_limit=2,
+            save_steps=200,
+            save_total_limit=3,
             load_best_model_at_end=True,
             metric_for_best_model="eval_loss",
             greater_is_better=False,
             report_to="none",
             fp16=True,
-            warmup_steps=100,
-            lr_scheduler_type="polynomial",
+            warmup_steps=500,  # Much longer warmup for gradual learning
+            lr_scheduler_type="polynomial",  # More controlled decay
             optim="adamw_torch",
             weight_decay=0.01,
-            max_grad_norm=1.0,
+            max_grad_norm=0.3,  # Even stricter gradient clipping
             seed=42,
             gradient_checkpointing=False,
-            label_smoothing_factor=0.0
+            label_smoothing_factor=0.0,
+            dataloader_drop_last=True,
+            remove_unused_columns=True,
+            prediction_loss_only=True,
+            dataloader_num_workers=0,  # Ensure consistent training
+            save_safetensors=True,
+            disable_tqdm=False  # Show progress for longer training
         )
         
         callbacks = [
-            ImprovedTargetLossCallback(target_loss=2.0),  # Realistic target
-            EarlyStoppingCallback(early_stopping_patience=5)
+            ImprovedTargetLossCallback(target_loss=1.2),  # More achievable but still good target
+            EarlyStoppingCallback(early_stopping_patience=15)  # Much more patience for slow learning
         ]
     else:
-        lora_config = get_lora_config(r=32, lora_alpha=64, lora_dropout=0.1)
+        lora_config = get_lora_config(r=64, lora_alpha=128, lora_dropout=0.1)
         
         training_args = TrainingArguments(
             output_dir=output_dir,
             per_device_train_batch_size=4,
             gradient_accumulation_steps=4,
-            learning_rate=1e-4,
-            num_train_epochs=5,
-            logging_steps=20,
+            learning_rate=2e-5,
+            num_train_epochs=8,
+            logging_steps=10,
             eval_strategy="steps",
-            eval_steps=40,
+            eval_steps=50,
             save_strategy="epoch",
             report_to="none",
             fp16=True,
-            warmup_ratio=0.1,
+            warmup_ratio=0.15,
             seed=42
         )
         callbacks = []
@@ -627,15 +714,17 @@ def train_interview_model(output_dir, optimized=False):
         eval_dataset=eval_dataset,
         tokenizer=tokenizer,
         dataset_text_field="text",
-        max_seq_length=256,  # Shorter sequences for cleaner training
+        max_seq_length=384,
         packing=False,
         callbacks=callbacks,
     )
     
+    print(f"Starting comprehensive interview model training with {len(train_dataset)} examples...")
+    print("This will take longer but should achieve better results...")
+    
     trainer.train()
     trainer.save_model(output_dir)
     print(f"Interview model fine-tuning complete. Model saved to {output_dir}")
-
 
 # --- Main Execution ---
 
@@ -645,13 +734,12 @@ def main():
         return
     
     parser = argparse.ArgumentParser(description="Fine-tune a model for a specific task.")
-    parser.add_argument("--model_type", type=str, required=True, choices=["cover_letter", "interview"])
+    parser.add_argument("--model_type", type=str, required=True, choices=["cover_letter", "interview", "interview_focused"])
     parser.add_argument("--output_dir", type=str, required=True)
     parser.add_argument("--hf_token", type=str, help="Hugging Face token")
     parser.add_argument("--optimized", action="store_true", help="Optimized mode for better performance")
     args = parser.parse_args()
 
-    # Hugging Face Login
     hf_token = args.hf_token or os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN") or os.getenv("HF_API_TOKEN")
     
     if hf_token:
@@ -673,6 +761,9 @@ def main():
     elif args.model_type == "interview":
         print("--- Starting Interview Model Fine-Tuning ---")
         train_interview_model(args.output_dir, optimized=args.optimized)
+    elif args.model_type == "interview_focused":
+        print("--- Starting Focused Interview Model Fine-Tuning ---")
+        train_interview_model_focused(args.output_dir, optimized=args.optimized)
 
 if __name__ == "__main__":
     main() 
