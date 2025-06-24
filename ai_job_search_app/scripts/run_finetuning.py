@@ -258,13 +258,11 @@ class ImprovedTargetLossCallback(TrainerCallback):
                 control.should_training_stop = True
 
 def train_cover_letter_model(output_dir, optimized=False):
-    """Balanced training approach for sub-0.8 loss."""
     set_random_seeds(42)
     
     MODEL_ID = "gpt2"
     CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
-
-    # Set cache for Kaggle
+    
     if "/kaggle/working" in os.getcwd():
         CACHE_DIR = "/kaggle/working/cache"
         os.makedirs(CACHE_DIR, exist_ok=True)
@@ -283,7 +281,7 @@ def train_cover_letter_model(output_dir, optimized=False):
         tokenizer = GPT2Tokenizer.from_pretrained(MODEL_ID, cache_dir=CACHE_DIR, local_files_only=True)
     
     tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.padding_side = "left"
+    tokenizer.padding_side = "right"
     
     try:
         model = download_with_retry(
@@ -307,15 +305,15 @@ def train_cover_letter_model(output_dir, optimized=False):
     model.config.use_cache = False
     
     if optimized:
-        lora_config = get_lora_config(r=64, lora_alpha=128, lora_dropout=0.05)
+        lora_config = get_lora_config(r=32, lora_alpha=64, lora_dropout=0.05)
         
         training_args = TrainingArguments(
             output_dir=output_dir,
             per_device_train_batch_size=4,
             per_device_eval_batch_size=4,
-            gradient_accumulation_steps=4,
-            learning_rate=3e-4,
-            num_train_epochs=5,
+            gradient_accumulation_steps=2,
+            learning_rate=2e-4,
+            num_train_epochs=4,
             logging_steps=10,
             eval_strategy="steps",
             eval_steps=50,
@@ -327,18 +325,18 @@ def train_cover_letter_model(output_dir, optimized=False):
             greater_is_better=False,
             report_to="none",
             fp16=True,
-            warmup_steps=200,
-            lr_scheduler_type="cosine_with_restarts",
+            warmup_steps=100,
+            lr_scheduler_type="cosine",
             optim="adamw_torch",
             weight_decay=0.01,
-            max_grad_norm=0.5,
+            max_grad_norm=1.0,
             seed=42,
-            gradient_checkpointing=True,
-            label_smoothing_factor=0.1
+            gradient_checkpointing=False,
+            label_smoothing_factor=0.0
         )
         
         callbacks = [
-            ImprovedTargetLossCallback(target_loss=0.5),
+            ImprovedTargetLossCallback(target_loss=0.8),
             EarlyStoppingCallback(early_stopping_patience=5)
         ]
     else:
@@ -363,6 +361,8 @@ def train_cover_letter_model(output_dir, optimized=False):
     
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
+    
+    model.train()
 
     trainer = SFTTrainer(
         model=model,
@@ -531,7 +531,7 @@ def train_interview_model(output_dir, optimized=False):
         tokenizer = GPT2Tokenizer.from_pretrained(MODEL_ID, cache_dir=CACHE_DIR, local_files_only=True)
     
     tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.padding_side = "left"
+    tokenizer.padding_side = "right"
     
     try:
         model = download_with_retry(
@@ -555,15 +555,15 @@ def train_interview_model(output_dir, optimized=False):
     model.config.use_cache = False
 
     if optimized:
-        lora_config = get_lora_config(r=64, lora_alpha=128, lora_dropout=0.05)
+        lora_config = get_lora_config(r=32, lora_alpha=64, lora_dropout=0.05)
         
         training_args = TrainingArguments(
             output_dir=output_dir,
             per_device_train_batch_size=2,
             per_device_eval_batch_size=2,
-            gradient_accumulation_steps=8,
-            learning_rate=1e-4,
-            num_train_epochs=5,
+            gradient_accumulation_steps=4,
+            learning_rate=5e-5,
+            num_train_epochs=4,
             logging_steps=10,
             eval_strategy="steps",
             eval_steps=30,
@@ -575,18 +575,18 @@ def train_interview_model(output_dir, optimized=False):
             greater_is_better=False,
             report_to="none",
             fp16=True,
-            warmup_steps=100,
-            lr_scheduler_type="polynomial",
+            warmup_steps=50,
+            lr_scheduler_type="cosine",
             optim="adamw_torch",
-            weight_decay=0.05,
-            max_grad_norm=0.5,
+            weight_decay=0.01,
+            max_grad_norm=1.0,
             seed=42,
-            gradient_checkpointing=True,
-            label_smoothing_factor=0.1
+            gradient_checkpointing=False,
+            label_smoothing_factor=0.0
         )
         
         callbacks = [
-            ImprovedTargetLossCallback(target_loss=0.8),
+            ImprovedTargetLossCallback(target_loss=1.0),
             EarlyStoppingCallback(early_stopping_patience=5)
         ]
     else:
@@ -611,6 +611,8 @@ def train_interview_model(output_dir, optimized=False):
     
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
+    
+    model.train()
 
     trainer = SFTTrainer(
         model=model,
