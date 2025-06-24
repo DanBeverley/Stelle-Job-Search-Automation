@@ -14,7 +14,7 @@ try:
         EarlyStoppingCallback
     )
     from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-    from trl import SFTTrainer
+    from trl import SFTTrainer, SFTConfig
     from huggingface_hub import login
     IMPORTS_SUCCESSFUL = True
 except ImportError as e:
@@ -82,7 +82,7 @@ def train_cover_letter_model(output_dir, optimized=False):
     # Qwen2.5 specific target modules for LoRA
     if optimized:
         # More aggressive regularization for optimized version
-        lora_config = get_lora_config(r=8, lora_alpha=16, target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"], lora_dropout=0.1)
+        lora_config = get_lora_config(r=8, lora_alpha=16, target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"], lora_dropout=0.15)
     else:
         lora_config = get_lora_config(r=16, lora_alpha=32, target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"], lora_dropout=0.05)
     
@@ -96,13 +96,13 @@ def train_cover_letter_model(output_dir, optimized=False):
             per_device_train_batch_size=1,
             per_device_eval_batch_size=1,
             gradient_accumulation_steps=8,
-            learning_rate=5e-5,  # Lower learning rate
+            learning_rate=3e-5,  # Even lower learning rate
             num_train_epochs=1,  # Single epoch to prevent overfitting
             logging_steps=10,
             eval_strategy="steps",
             eval_steps=25,  # More frequent evaluation
             save_strategy="steps",
-            save_steps=50,
+            save_steps=50,  # Ensure this is multiple of eval_steps (50 = 25 * 2)
             save_total_limit=2,
             load_best_model_at_end=True,  # Load best model based on eval loss
             metric_for_best_model="eval_loss",
@@ -111,18 +111,21 @@ def train_cover_letter_model(output_dir, optimized=False):
             fp16=True,
             dataloader_pin_memory=False,
             dataloader_num_workers=0,
-            weight_decay=0.05,  # Increased weight decay
-            warmup_ratio=0.05,  # Reduced warmup
+            weight_decay=0.1,  # Higher weight decay
+            warmup_ratio=0.03,  # Minimal warmup
             lr_scheduler_type="cosine",
             optim="adamw_torch",
             gradient_checkpointing=True,
             remove_unused_columns=True,
-            max_grad_norm=0.5,  # Stricter gradient clipping
+            max_grad_norm=0.3,  # Even stricter gradient clipping
             dataloader_drop_last=True,  # Drop incomplete batches
+            # Additional anti-overfitting measures
+            eval_accumulation_steps=1,
+            prediction_loss_only=True,
         )
         
-        # Add early stopping callback
-        callbacks = [EarlyStoppingCallback(early_stopping_patience=3, early_stopping_threshold=0.01)]
+        # Add early stopping callback with more aggressive settings
+        callbacks = [EarlyStoppingCallback(early_stopping_patience=2, early_stopping_threshold=0.005)]
     else:
         # Original training arguments
         training_args = TrainingArguments(
@@ -152,18 +155,23 @@ def train_cover_letter_model(output_dir, optimized=False):
         )
         callbacks = []
 
+    # Create SFTConfig to avoid deprecated warnings
+    sft_config = SFTConfig(
+        dataset_text_field="Cover Letter",
+        packing=True,
+        max_seq_length=512,
+    )
+
     trainer = SFTTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         peft_config=lora_config,
-        dataset_text_field="Cover Letter",
         tokenizer=tokenizer,
-        packing=True,
-        max_seq_length=512,
         formatting_func=format_cover_letter_prompt,
         callbacks=callbacks,
+        **sft_config.__dict__,  # Unpack SFTConfig to avoid deprecation warnings
     )
 
     trainer.train()
@@ -250,7 +258,7 @@ def train_interview_model(output_dir, optimized=False):
     # DialoGPT specific target modules for LoRA
     if optimized:
         # More aggressive regularization for optimized version
-        lora_config = get_lora_config(r=8, lora_alpha=16, target_modules=["c_attn", "c_proj"], lora_dropout=0.1)
+        lora_config = get_lora_config(r=8, lora_alpha=16, target_modules=["c_attn", "c_proj"], lora_dropout=0.15)
     else:
         lora_config = get_lora_config(r=16, lora_alpha=32, target_modules=["c_attn", "c_proj"], lora_dropout=0.05)
     
@@ -258,19 +266,19 @@ def train_interview_model(output_dir, optimized=False):
     model = get_peft_model(model, lora_config)
 
     if optimized:
-        # Optimized training arguments to prevent severe overfitting
+        # Optimized training arguments to prevent severe overfitting - FIXED STEPS MISMATCH
         training_args = TrainingArguments(
             output_dir=output_dir,
             per_device_train_batch_size=2,
             per_device_eval_batch_size=2,
             gradient_accumulation_steps=4,
-            learning_rate=5e-5,  # Lower learning rate
-            max_steps=50,  # Much fewer steps to prevent overfitting
+            learning_rate=3e-5,  # Even lower learning rate
+            max_steps=40,  # Reduced steps to prevent overfitting
             logging_steps=5,
             eval_strategy="steps",
-            eval_steps=10,  # More frequent evaluation
+            eval_steps=10,  # Evaluation every 10 steps
             save_strategy="steps",
-            save_steps=15,
+            save_steps=20,  # Save every 20 steps (20 = 10 * 2) - FIXED: Now multiple of eval_steps
             save_total_limit=2,
             load_best_model_at_end=True,  # Load best model
             metric_for_best_model="eval_loss",
@@ -279,20 +287,23 @@ def train_interview_model(output_dir, optimized=False):
             fp16=True,
             dataloader_pin_memory=False,
             dataloader_num_workers=0,
-            weight_decay=0.05,  # Increased weight decay
-            warmup_ratio=0.1,
+            weight_decay=0.1,  # Higher weight decay
+            warmup_ratio=0.05,  # Minimal warmup
             lr_scheduler_type="cosine",
             optim="adamw_torch",
             gradient_checkpointing=True,
             remove_unused_columns=True,
-            max_grad_norm=0.5,  # Stricter gradient clipping
+            max_grad_norm=0.3,  # Even stricter gradient clipping
             dataloader_drop_last=True,
+            # Additional anti-overfitting measures
+            eval_accumulation_steps=1,
+            prediction_loss_only=True,
         )
         
-        # Add early stopping callback
-        callbacks = [EarlyStoppingCallback(early_stopping_patience=2, early_stopping_threshold=0.01)]
+        # Add early stopping callback with more aggressive settings
+        callbacks = [EarlyStoppingCallback(early_stopping_patience=2, early_stopping_threshold=0.005)]
     else:
-        # Original training arguments
+        # Original training arguments - ALSO FIXED STEPS MISMATCH
         training_args = TrainingArguments(
             output_dir=output_dir,
             per_device_train_batch_size=2,
@@ -304,6 +315,7 @@ def train_interview_model(output_dir, optimized=False):
             eval_strategy="steps",
             eval_steps=30,
             save_strategy="steps",
+            save_steps=60,  # FIXED: 60 = 30 * 2 (multiple of eval_steps)
             save_total_limit=1,
             load_best_model_at_end=False,
             report_to="none",
@@ -320,17 +332,22 @@ def train_interview_model(output_dir, optimized=False):
         )
         callbacks = []
 
+    # Create SFTConfig to avoid deprecated warnings
+    sft_config = SFTConfig(
+        dataset_text_field="text",
+        max_seq_length=256,
+        packing=True,
+    )
+
     trainer = SFTTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         peft_config=lora_config,
-        dataset_text_field="text",
-        max_seq_length=256,
         tokenizer=tokenizer,
-        packing=True,
         callbacks=callbacks,
+        **sft_config.__dict__,  # Unpack SFTConfig to avoid deprecation warnings
     )
     
     trainer.train()
@@ -397,7 +414,7 @@ def main():
 
     # Print optimization status
     if args.optimized:
-        print("🎯 OPTIMIZED MODE: Using regularization techniques to prevent overfitting")
+        print("🎯 OPTIMIZED MODE: Using enhanced regularization techniques to prevent overfitting")
     else:
         print("📊 STANDARD MODE: Using original training parameters")
 

@@ -129,7 +129,7 @@ def normalize_classification_data():
         else:
             # Add a dummy location column if missing
             df['location'] = 'Unknown'
-            return df[['title', 'location', 'description', 'min_salary', 'max_salary']]
+        return df[['title', 'location', 'description', 'min_salary', 'max_salary']]
     except Exception as e:
         print(f"Could not process classification dataset. Error: {e}")
         return pd.DataFrame()
@@ -214,7 +214,7 @@ def normalize_azrai_data():
             return df[['title', 'location', 'description', 'min_salary', 'max_salary']]
         else:
             df['location'] = 'Unknown'
-            return df[['title', 'location', 'description', 'min_salary', 'max_salary']]
+        return df[['title', 'location', 'description', 'min_salary', 'max_salary']]
     except Exception as e:
         print(f"Could not process Azrai dataset. Error: {e}")
         return pd.DataFrame()
@@ -253,7 +253,7 @@ def main():
     combined_df['title'] = combined_df['title'].fillna('Unknown').astype(str)
     combined_df['location'] = combined_df['location'].fillna('Unknown').astype(str)
     combined_df['description'] = combined_df['description'].fillna('No description').astype(str)
-    
+
     X = combined_df[['title', 'location', 'description']]
     y = combined_df['Salary.Avg']
 
