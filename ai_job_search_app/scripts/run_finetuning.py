@@ -305,58 +305,68 @@ def train_cover_letter_model(output_dir, optimized=False):
     model.config.use_cache = False
 
     if optimized:
-        # Adjusted to prevent overfitting with higher dropout and regularization
-        lora_config = get_lora_config(r=16, lora_alpha=32, lora_dropout=0.15)
+        # Extremely conservative training configuration to prevent fast overfitting
+        lora_config = get_lora_config(r=32, lora_alpha=64, lora_dropout=0.2)  # Smaller capacity, more regularization
         
         training_args = TrainingArguments(
             output_dir=output_dir,
-            per_device_train_batch_size=4,
-            per_device_eval_batch_size=4,
-            gradient_accumulation_steps=2,
-            learning_rate=1e-4,
-            num_train_epochs=2,  # Reduced epochs to prevent overfitting
-            logging_steps=10,
+            per_device_train_batch_size=1,  # Minimum batch size
+            per_device_eval_batch_size=1,
+            gradient_accumulation_steps=32,  # Very large accumulation for stable gradients
+            learning_rate=5e-6,  # Much slower learning rate 
+            num_train_epochs=25,  # Many more epochs for slow learning
+            logging_steps=5,  # Very frequent logging
             eval_strategy="steps",
-            eval_steps=50,
+            eval_steps=200,  # Less frequent evaluation to allow more training
             save_strategy="steps",
-            save_steps=100,
-            save_total_limit=2,
+            save_steps=400,
+            save_total_limit=5,
             load_best_model_at_end=True,
             metric_for_best_model="eval_loss",
             greater_is_better=False,
             report_to="none",
             fp16=True,
-            warmup_steps=50,
-            lr_scheduler_type="cosine",
+            warmup_steps=1000,  # Very long warmup for extremely gradual learning
+            lr_scheduler_type="polynomial",  # Controlled decay
             optim="adamw_torch",
-            weight_decay=0.05,  # Increased weight decay
-            max_grad_norm=1.0,
+            weight_decay=0.02,  # More regularization
+            max_grad_norm=0.1,  # Very strict gradient clipping
             seed=42,
             gradient_checkpointing=False,
-            label_smoothing_factor=0.0
+            label_smoothing_factor=0.0,
+            dataloader_drop_last=True,
+            remove_unused_columns=True,
+            prediction_loss_only=True,
+            dataloader_num_workers=0,
+            save_safetensors=True,
+            disable_tqdm=False,
+            # Additional slowdown parameters
+            eval_accumulation_steps=8,  # Slower evaluation
+            save_on_each_node=False,
         )
         
         callbacks = [
-            ImprovedTargetLossCallback(target_loss=1.0),  # Higher target to prevent overfitting
-            EarlyStoppingCallback(early_stopping_patience=3)
+            ImprovedTargetLossCallback(target_loss=1.5),  # More conservative target
+            EarlyStoppingCallback(early_stopping_patience=25)  # Much more patience
         ]
     else:
-        lora_config = get_lora_config()
+        lora_config = get_lora_config(r=16, lora_alpha=32, lora_dropout=0.15)  # Even smaller for standard mode
         
         training_args = TrainingArguments(
             output_dir=output_dir,
-            per_device_train_batch_size=8,
-            gradient_accumulation_steps=2,
-            learning_rate=2e-4,
-            num_train_epochs=2,
-            logging_steps=20,
+            per_device_train_batch_size=2,
+            gradient_accumulation_steps=16,
+            learning_rate=1e-5,  # Slower standard rate
+            num_train_epochs=15,  # More epochs
+            logging_steps=10,
             eval_strategy="steps",
             eval_steps=100,
             save_strategy="epoch",
             report_to="none",
             fp16=True,
-            warmup_ratio=0.1,
-            seed=42
+            warmup_ratio=0.2,  # Longer warmup
+            seed=42,
+            weight_decay=0.01
         )
         callbacks = []
     
@@ -537,7 +547,7 @@ def prepare_interview_data_comprehensive(dataset_name):
     # Generate behavioral questions with multiple variations (increased multiplier)
     for qa in behavioral_questions:
         for variation in qa["variations"]:
-            for _ in range(3):  # Triple each variation for more training data
+            for _ in range(15):  # Much more repetitions for behavioral questions
                 synthetic_data.append({
                     "text": f"### Human: {qa['q']}\n\n### Assistant: {variation}\n\n### End"
                 })
@@ -545,21 +555,21 @@ def prepare_interview_data_comprehensive(dataset_name):
     # Generate technical deep-dive questions (increased multiplier)
     for topic_data in technical_deep_dive:
         for q, a in topic_data["questions"]:
-            for i in range(5):  # More repetitions for technical questions
+            for i in range(25):  # Much more repetitions for technical questions
                 synthetic_data.append({
                     "text": f"### Human: {q}\n\n### Assistant: {a}\n\n### End"
                 })
     
     # Generate STAR format questions (increased multiplier)
     for qa in star_questions:
-        for _ in range(6):  # More STAR examples
+        for _ in range(30):  # Much more STAR examples
             synthetic_data.append({
                 "text": f"### Human: {qa['q']}\n\n### Assistant: {qa['a']}\n\n### End"
             })
     
     # Generate industry questions (increased multiplier)
     for q, a in industry_questions:
-        for _ in range(8):  # More industry-specific questions
+        for _ in range(40):  # Much more industry-specific questions
             synthetic_data.append({
                 "text": f"### Human: {q}\n\n### Assistant: {a}\n\n### End"
             })
@@ -577,7 +587,7 @@ def prepare_interview_data_comprehensive(dataset_name):
     ]
     
     for q, a in company_questions:
-        for _ in range(7):  # More company-specific questions
+        for _ in range(35):  # Much more company-specific questions
             synthetic_data.append({
                 "text": f"### Human: {q}\n\n### Assistant: {a}\n\n### End"
             })
@@ -641,64 +651,68 @@ def train_interview_model_focused(output_dir, optimized=False):
     model.config.use_cache = False
 
     if optimized:
-        # Much slower and more thorough training configuration
-        lora_config = get_lora_config(r=96, lora_alpha=192, lora_dropout=0.1)  # Balanced capacity
+        # Extremely conservative training configuration to prevent fast overfitting
+        lora_config = get_lora_config(r=32, lora_alpha=64, lora_dropout=0.2)  # Smaller capacity, more regularization
         
         training_args = TrainingArguments(
             output_dir=output_dir,
-            per_device_train_batch_size=1,  # Very small batch for maximum gradient updates
+            per_device_train_batch_size=1,  # Minimum batch size
             per_device_eval_batch_size=1,
-            gradient_accumulation_steps=16,  # Larger effective batch size but more updates
-            learning_rate=1e-5,  # Much slower learning rate for gradual learning
-            num_train_epochs=15,  # Many more epochs for thorough learning
-            logging_steps=10,  # More frequent logging
+            gradient_accumulation_steps=32,  # Very large accumulation for stable gradients
+            learning_rate=5e-6,  # Much slower learning rate 
+            num_train_epochs=25,  # Many more epochs for slow learning
+            logging_steps=5,  # Very frequent logging
             eval_strategy="steps",
-            eval_steps=100,  # Less frequent evaluation to allow more training
+            eval_steps=200,  # Less frequent evaluation to allow more training
             save_strategy="steps",
-            save_steps=200,
-            save_total_limit=3,
+            save_steps=400,
+            save_total_limit=5,
             load_best_model_at_end=True,
             metric_for_best_model="eval_loss",
             greater_is_better=False,
             report_to="none",
             fp16=True,
-            warmup_steps=500,  # Much longer warmup for gradual learning
-            lr_scheduler_type="polynomial",  # More controlled decay
+            warmup_steps=1000,  # Very long warmup for extremely gradual learning
+            lr_scheduler_type="polynomial",  # Controlled decay
             optim="adamw_torch",
-            weight_decay=0.01,
-            max_grad_norm=0.3,  # Even stricter gradient clipping
+            weight_decay=0.02,  # More regularization
+            max_grad_norm=0.1,  # Very strict gradient clipping
             seed=42,
             gradient_checkpointing=False,
             label_smoothing_factor=0.0,
             dataloader_drop_last=True,
             remove_unused_columns=True,
             prediction_loss_only=True,
-            dataloader_num_workers=0,  # Ensure consistent training
+            dataloader_num_workers=0,
             save_safetensors=True,
-            disable_tqdm=False  # Show progress for longer training
+            disable_tqdm=False,
+            # Additional slowdown parameters
+            eval_accumulation_steps=8,  # Slower evaluation
+            save_on_each_node=False,
         )
         
         callbacks = [
-            ImprovedTargetLossCallback(target_loss=1.2),  # More achievable but still good target
-            EarlyStoppingCallback(early_stopping_patience=15)  # Much more patience for slow learning
+            ImprovedTargetLossCallback(target_loss=1.5),  # More conservative target
+            EarlyStoppingCallback(early_stopping_patience=25)  # Much more patience
         ]
     else:
-        lora_config = get_lora_config(r=64, lora_alpha=128, lora_dropout=0.1)
+        lora_config = get_lora_config(r=16, lora_alpha=32, lora_dropout=0.15)  # Even smaller for standard mode
         
         training_args = TrainingArguments(
             output_dir=output_dir,
-            per_device_train_batch_size=4,
-            gradient_accumulation_steps=4,
-            learning_rate=2e-5,
-            num_train_epochs=8,
+            per_device_train_batch_size=2,
+            gradient_accumulation_steps=16,
+            learning_rate=1e-5,  # Slower standard rate
+            num_train_epochs=15,  # More epochs
             logging_steps=10,
             eval_strategy="steps",
-            eval_steps=50,
+            eval_steps=100,
             save_strategy="epoch",
             report_to="none",
             fp16=True,
-            warmup_ratio=0.15,
-            seed=42
+            warmup_ratio=0.2,  # Longer warmup
+            seed=42,
+            weight_decay=0.01
         )
         callbacks = []
     
@@ -760,7 +774,7 @@ def main():
         train_cover_letter_model(args.output_dir, optimized=args.optimized)
     elif args.model_type == "interview":
         print("--- Starting Interview Model Fine-Tuning ---")
-        train_interview_model(args.output_dir, optimized=args.optimized)
+        train_interview_model_focused(args.output_dir, optimized=args.optimized)
     elif args.model_type == "interview_focused":
         print("--- Starting Focused Interview Model Fine-Tuning ---")
         train_interview_model_focused(args.output_dir, optimized=args.optimized)
