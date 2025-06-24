@@ -164,8 +164,8 @@ def prepare_cover_letter_data(dataset_name, cache_dir):
         dataset = dataset.shuffle(seed=42)
         split_dataset = dataset.train_test_split(test_size=0.1, seed=42)
         
-        train_size = min(500, len(split_dataset['train']))
-        eval_size = min(50, len(split_dataset['test']))
+        train_size = min(800, len(split_dataset['train']))
+        eval_size = min(100, len(split_dataset['test']))
         
         train_dataset = split_dataset['train'].select(range(train_size))
         eval_dataset = split_dataset['test'].select(range(eval_size))
@@ -174,7 +174,7 @@ def prepare_cover_letter_data(dataset_name, cache_dir):
         print(f"Failed to load dataset from HuggingFace: {e}")
         print("Using synthetic data instead...")
         
-        dataset = create_synthetic_cover_letters(600)
+        dataset = create_synthetic_cover_letters(1000)
         split_dataset = dataset.train_test_split(test_size=0.1, seed=42)
         train_dataset = split_dataset['train']
         eval_dataset = split_dataset['test']
@@ -182,14 +182,28 @@ def prepare_cover_letter_data(dataset_name, cache_dir):
     def process_example(example):
         job_title = example.get('Job Title', 'Unknown Position')
         company = example.get('Hiring Company', 'Unknown Company')
-        cover_letter = example.get('Cover Letter', '')
+        cover_letter = example.get('Cover Letter', '').strip()
         
-        text = f"Write a cover letter for {job_title} position at {company}.\n\nCover Letter:\n{cover_letter}\n"
+        if len(cover_letter) < 50:
+            cover_letter = f"I am writing to apply for the {job_title} position at {company}. I believe my skills and experience make me an excellent candidate for this role."
+        
+        instruction = f"Write a professional cover letter for the {job_title} position at {company}."
+        
+        text = f"""### Instruction:
+{instruction}
+
+### Response:
+{cover_letter}
+
+### End"""
         
         return {"text": text}
     
-    train_dataset = train_dataset.map(process_example)
-    eval_dataset = eval_dataset.map(process_example)
+    train_dataset = train_dataset.map(process_example, remove_columns=train_dataset.column_names)
+    eval_dataset = eval_dataset.map(process_example, remove_columns=eval_dataset.column_names)
+    
+    train_dataset = train_dataset.filter(lambda x: len(x['text']) > 100)
+    eval_dataset = eval_dataset.filter(lambda x: len(x['text']) > 100)
     
     print(f"Training with {len(train_dataset)} examples, evaluating on {len(eval_dataset)} examples")
     
@@ -293,15 +307,15 @@ def train_cover_letter_model(output_dir, optimized=False):
     model.config.use_cache = False
     
     if optimized:
-        lora_config = get_lora_config(r=32, lora_alpha=64, lora_dropout=0.1)
+        lora_config = get_lora_config(r=64, lora_alpha=128, lora_dropout=0.05)
         
         training_args = TrainingArguments(
             output_dir=output_dir,
             per_device_train_batch_size=4,
             per_device_eval_batch_size=4,
             gradient_accumulation_steps=4,
-            learning_rate=5e-4,
-            num_train_epochs=3,
+            learning_rate=3e-4,
+            num_train_epochs=5,
             logging_steps=10,
             eval_strategy="steps",
             eval_steps=50,
@@ -313,17 +327,19 @@ def train_cover_letter_model(output_dir, optimized=False):
             greater_is_better=False,
             report_to="none",
             fp16=True,
-            warmup_steps=100,
-            lr_scheduler_type="cosine",
+            warmup_steps=200,
+            lr_scheduler_type="cosine_with_restarts",
             optim="adamw_torch",
             weight_decay=0.01,
-            max_grad_norm=1.0,
-            seed=42
+            max_grad_norm=0.5,
+            seed=42,
+            gradient_checkpointing=True,
+            label_smoothing_factor=0.1
         )
         
         callbacks = [
-            ImprovedTargetLossCallback(target_loss=1.5),
-            EarlyStoppingCallback(early_stopping_patience=3)
+            ImprovedTargetLossCallback(target_loss=0.5),
+            EarlyStoppingCallback(early_stopping_patience=5)
         ]
     else:
         lora_config = get_lora_config()
@@ -333,7 +349,7 @@ def train_cover_letter_model(output_dir, optimized=False):
             per_device_train_batch_size=8,
             gradient_accumulation_steps=2,
             learning_rate=2e-4,
-            num_train_epochs=2,
+            num_train_epochs=3,
             logging_steps=20,
             eval_strategy="steps",
             eval_steps=100,
@@ -367,64 +383,135 @@ def train_cover_letter_model(output_dir, optimized=False):
 # --- Interview Question Model ---
 
 def prepare_interview_data(dataset_name):
-    """Balanced synthetic data for controlled learning."""
     set_random_seeds(42)
     
-    questions_and_answers = [
-        ("Tell me about yourself", "I am a dedicated professional with expertise in software development and a passion for creating innovative solutions."),
-        ("Why do you want this position?", "I am excited about this opportunity because it aligns with my skills and career goals, allowing me to contribute meaningfully to your team."),
-        ("What are your strengths?", "My key strengths include problem-solving, adaptability, and strong communication skills that help me work effectively in team environments."),
-        ("Where do you see yourself in 5 years?", "In 5 years, I see myself having grown professionally within your organization, taking on leadership responsibilities and contributing to strategic initiatives."),
-        ("Why are you leaving your current job?", "I'm seeking new challenges and opportunities for growth that align better with my long-term career objectives."),
-        ("Tell me about a challenge you overcame", "I successfully led a critical project under tight deadlines by implementing efficient processes and fostering team collaboration."),
-        ("What motivates you?", "I'm motivated by solving complex problems, continuous learning, and seeing the positive impact of my work on users and colleagues."),
-        ("How do you handle stress?", "I manage stress through prioritization, clear communication, and maintaining a balanced perspective on challenges."),
-        ("Describe your ideal work environment", "I thrive in collaborative environments that encourage innovation, provide learning opportunities, and value open communication."),
-        ("What are your salary expectations?", "I'm looking for compensation that reflects my experience and the value I'll bring to your organization, and I'm open to discussing your range.")
+    behavioral_questions = [
+        ("Tell me about yourself", "I am a dedicated professional with [X years] of experience in [field]. My expertise includes [key skills], and I'm passionate about [relevant interest]. I've successfully [achievement], which demonstrates my ability to [relevant skill]."),
+        ("Why do you want this position?", "This role aligns perfectly with my career goals and expertise in [relevant area]. I'm excited about [specific aspect of company/role] and believe my experience in [relevant experience] will allow me to make immediate contributions to your team."),
+        ("What are your greatest strengths?", "My greatest strengths include [specific skill 1], which I demonstrated when [example]. Additionally, my [skill 2] has enabled me to [achievement]. I also pride myself on my [soft skill], which helps me [benefit to team]."),
+        ("What is your biggest weakness?", "I've been working on improving my [skill], as I realized it was limiting my effectiveness in [area]. I've taken steps to address this by [specific action], and I've seen improvement in [specific result]."),
+        ("Where do you see yourself in 5 years?", "In five years, I see myself having grown significantly in [skill area], potentially leading [type of projects/team]. I'm interested in developing expertise in [area] and contributing to [company goal] while continuing to learn and take on new challenges."),
+        ("Why are you leaving your current job?", "I'm seeking new challenges and opportunities to grow in [specific area]. While I've learned a great deal in my current role, I'm ready for [next step] and believe this position offers the [specific opportunity] I'm looking for."),
+        ("Describe a challenging situation you overcame", "I faced a significant challenge when [situation]. I approached it by [action 1], then [action 2]. The result was [positive outcome], and I learned [lesson] which has helped me in subsequent projects."),
+        ("How do you handle stress and pressure?", "I manage stress by [strategy 1], which helps me maintain perspective. I also [strategy 2] to stay organized and focused. For example, during [stressful situation], I [specific action] which resulted in [positive outcome]."),
+        ("What motivates you?", "I'm motivated by [specific motivator 1], as it allows me to [benefit]. I also find [motivator 2] incredibly rewarding because [reason]. This drives me to consistently [positive behavior] in my work."),
+        ("How do you handle conflict with colleagues?", "I approach conflicts by first seeking to understand the other person's perspective through [method]. Then I [action] to find common ground. For instance, when [example situation], I [specific action] which led to [resolution]."),
+        ("What makes you unique?", "My unique combination of [skill 1] and [skill 2] allows me to [unique value]. Additionally, my experience in [unique area] gives me a perspective that helps me [benefit]. This has enabled me to [specific achievement]."),
+        ("Describe your ideal work environment", "I thrive in environments that [characteristic 1] and [characteristic 2]. I appreciate when [specific aspect] because it allows me to [benefit]. I also value [cultural element] as it aligns with my working style.")
     ]
     
-    skills = ["Python", "JavaScript", "React", "Java", "SQL", "AWS", "Docker", "Machine Learning", "Data Analysis", "Project Management"]
+    technical_questions_template = [
+        ("Explain {} to a non-technical person", "I would explain {} by comparing it to [everyday analogy]. Essentially, it [simple explanation]. The key benefit is [main advantage], which helps [practical application]."),
+        ("How would you optimize a {} system?", "To optimize a {} system, I would first analyze [metric 1] and [metric 2]. Then implement [optimization 1] and [optimization 2]. I'd measure success by tracking [KPI] and iterating based on results."),
+        ("What's your experience with {}?", "I have [duration] of hands-on experience with {}. I've used it to [specific application 1] and [application 2]. My most significant project involved [example], where I achieved [result]."),
+        ("How do you stay current with {} technologies?", "I stay current by [method 1] and [method 2]. I regularly [activity] and participate in [community/resource]. Recently, I learned about [recent development] which I've started implementing in [context]."),
+        ("Describe a {} project you've worked on", "I worked on a {} project that involved [objective]. My role was to [responsibility 1] and [responsibility 2]. The project resulted in [outcome] and taught me [lesson learned]."),
+        ("What are best practices for {}?", "Key best practices for {} include [practice 1] to ensure [benefit 1], and [practice 2] for [benefit 2]. I also recommend [practice 3] because it [reason]. These practices have helped me [achievement].")
+    ]
+    
+    skills = ["Python", "JavaScript", "React", "Node.js", "Java", "SQL", "AWS", "Docker", 
+              "Kubernetes", "Machine Learning", "API Development", "Database Design",
+              "Microservices", "CI/CD", "Agile Methodology", "System Architecture"]
     
     synthetic_data = []
     
-    for q, a in questions_and_answers:
-        for _ in range(5):
+    for q, a_template in behavioral_questions:
+        for i in range(3):
+            answer = a_template.replace("[X years]", f"{random.randint(2,10)} years")
+            answer = answer.replace("[field]", random.choice(["software development", "data science", "engineering", "technology"]))
+            answer = answer.replace("[key skills]", f"{random.choice(skills)} and {random.choice(skills)}")
+            answer = answer.replace("[relevant interest]", random.choice(["solving complex problems", "building scalable systems", "creating innovative solutions"]))
+            answer = answer.replace("[achievement]", random.choice(["led successful projects", "improved system performance by 40%", "mentored junior developers"]))
+            answer = answer.replace("[relevant skill]", random.choice(["deliver results", "work effectively in teams", "solve complex challenges"]))
+            
+            placeholders = ["[specific skill 1]", "[skill 2]", "[soft skill]", "[example]", "[area]", "[specific action]", 
+                          "[skill area]", "[type of projects/team]", "[company goal]", "[next step]", "[specific opportunity]",
+                          "[situation]", "[action 1]", "[action 2]", "[positive outcome]", "[lesson]", "[strategy 1]", 
+                          "[strategy 2]", "[stressful situation]", "[specific motivator 1]", "[motivator 2]", "[benefit]",
+                          "[method]", "[action]", "[example situation]", "[resolution]", "[unique value]", "[unique area]",
+                          "[specific achievement]", "[characteristic 1]", "[characteristic 2]", "[specific aspect]", "[cultural element]"]
+            
+            for placeholder in placeholders:
+                if placeholder in answer:
+                    if "skill" in placeholder:
+                        answer = answer.replace(placeholder, random.choice(skills), 1)
+                    elif "action" in placeholder or "strategy" in placeholder or "method" in placeholder:
+                        answer = answer.replace(placeholder, random.choice(["prioritizing tasks", "breaking down problems", "collaborating with teams", "researching solutions"]), 1)
+                    elif "outcome" in placeholder or "result" in placeholder or "achievement" in placeholder:
+                        answer = answer.replace(placeholder, random.choice(["successful project delivery", "improved efficiency", "positive team dynamics", "exceeded targets"]), 1)
+                    else:
+                        answer = answer.replace(placeholder, random.choice(["challenging project", "team collaboration", "process improvement", "innovative solutions"]), 1)
+            
             synthetic_data.append({
-                "text": f"Interview Question: {q}\n\nAnswer: {a}\n"
+                "text": f"""### Question:
+{q}
+
+### Answer:
+{answer}
+"""
             })
     
     for skill in skills:
-        questions = [
-            f"What is your experience with {skill}?",
-            f"How do you approach {skill} projects?",
-            f"Describe a {skill} challenge you solved."
-        ]
-        
-        answers = [
-            f"I have extensive experience with {skill}, having worked on multiple projects that required deep knowledge of its capabilities.",
-            f"I approach {skill} projects by first understanding requirements, then designing scalable solutions using best practices.",
-            f"I once resolved a complex {skill} issue by analyzing the problem systematically and implementing an optimized solution."
-        ]
-        
-        for q, a in zip(questions, answers):
+        for q_template, a_template in technical_questions_template:
+            question = q_template.format(skill)
+            answer = a_template.format(skill, skill)
+            
+            answer = answer.replace("[everyday analogy]", random.choice(["a filing system", "a recipe", "a road network", "a library"]))
+            answer = answer.replace("[simple explanation]", f"helps manage and organize {random.choice(['data', 'processes', 'systems', 'workflows'])}")
+            answer = answer.replace("[main advantage]", random.choice(["increased efficiency", "better organization", "scalability", "reliability"]))
+            answer = answer.replace("[practical application]", random.choice(["solve real problems", "improve performance", "save time", "reduce errors"]))
+            answer = answer.replace("[metric 1]", random.choice(["performance", "latency", "throughput", "resource usage"]))
+            answer = answer.replace("[metric 2]", random.choice(["scalability", "reliability", "cost", "maintainability"]))
+            answer = answer.replace("[optimization 1]", random.choice(["caching", "indexing", "load balancing", "code optimization"]))
+            answer = answer.replace("[optimization 2]", random.choice(["parallel processing", "database tuning", "algorithm improvements", "resource allocation"]))
+            answer = answer.replace("[KPI]", random.choice(["response time", "error rate", "throughput", "user satisfaction"]))
+            answer = answer.replace("[duration]", f"{random.randint(1,5)} years")
+            answer = answer.replace("[specific application 1]", random.choice(["build applications", "analyze data", "optimize systems", "solve problems"]))
+            answer = answer.replace("[application 2]", random.choice(["improve performance", "automate processes", "enhance features", "debug issues"]))
+            answer = answer.replace("[example]", f"building a {random.choice(['web application', 'data pipeline', 'microservice', 'API'])}")
+            answer = answer.replace("[result]", random.choice(["50% performance improvement", "reduced costs by 30%", "improved user experience", "automated manual processes"]))
+            answer = answer.replace("[method 1]", random.choice(["reading documentation", "following tech blogs", "taking online courses", "attending conferences"]))
+            answer = answer.replace("[method 2]", random.choice(["building projects", "contributing to open source", "participating in forums", "experimenting with new features"]))
+            answer = answer.replace("[activity]", random.choice(["practice coding", "read articles", "watch tutorials", "review code"]))
+            answer = answer.replace("[community/resource]", random.choice(["developer communities", "Stack Overflow", "GitHub projects", "tech meetups"]))
+            answer = answer.replace("[recent development]", random.choice(["new framework features", "performance improvements", "security updates", "best practices"]))
+            answer = answer.replace("[context]", random.choice(["personal projects", "work assignments", "side projects", "learning exercises"]))
+            answer = answer.replace("[objective]", random.choice(["improve performance", "add new features", "fix critical bugs", "migrate systems"]))
+            answer = answer.replace("[responsibility 1]", random.choice(["design architecture", "implement features", "write tests", "review code"]))
+            answer = answer.replace("[responsibility 2]", random.choice(["optimize performance", "document code", "mentor teammates", "deploy solutions"]))
+            answer = answer.replace("[outcome]", random.choice(["successful deployment", "improved metrics", "positive feedback", "system stability"]))
+            answer = answer.replace("[lesson learned]", random.choice(["importance of testing", "value of documentation", "benefits of collaboration", "need for planning"]))
+            answer = answer.replace("[practice 1]", random.choice(["write clean code", "use version control", "implement testing", "follow standards"]))
+            answer = answer.replace("[benefit 1]", random.choice(["maintainability", "reliability", "scalability", "readability"]))
+            answer = answer.replace("[practice 2]", random.choice(["regular refactoring", "code reviews", "documentation", "monitoring"]))
+            answer = answer.replace("[benefit 2]", random.choice(["code quality", "team knowledge", "system stability", "performance"]))
+            answer = answer.replace("[practice 3]", random.choice(["continuous learning", "automation", "security focus", "user feedback"]))
+            answer = answer.replace("[reason]", random.choice(["prevents issues", "saves time", "improves quality", "reduces risks"]))
+            answer = answer.replace("[achievement]", random.choice(["deliver quality code", "meet deadlines", "exceed expectations", "solve problems efficiently"]))
+            
             synthetic_data.append({
-                "text": f"Interview Question: {q}\n\nAnswer: {a}\n"
+                "text": f"""### Question:
+{question}
+
+### Answer:
+{answer}
+"""
             })
     
     print(f"Generated {len(synthetic_data)} interview examples")
     
+    random.shuffle(synthetic_data)
+    
     dataset = Dataset.from_list(synthetic_data)
-    split_dataset = dataset.train_test_split(test_size=0.1, seed=42)
+    split_dataset = dataset.train_test_split(test_size=0.15, seed=42)
     
     return split_dataset['train'], split_dataset['test']
 
 def train_interview_model(output_dir, optimized=False):
-    """Balanced training for sub-0.8 loss."""
     set_random_seeds(42)
     
     MODEL_ID = "gpt2"
-
-    # Set cache for Kaggle
+    
     CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
     if "/kaggle/working" in os.getcwd():
         CACHE_DIR = "/kaggle/working/cache"
@@ -468,15 +555,15 @@ def train_interview_model(output_dir, optimized=False):
     model.config.use_cache = False
 
     if optimized:
-        lora_config = get_lora_config(r=32, lora_alpha=64, lora_dropout=0.1)
+        lora_config = get_lora_config(r=64, lora_alpha=128, lora_dropout=0.05)
         
         training_args = TrainingArguments(
             output_dir=output_dir,
-            per_device_train_batch_size=4,
-            per_device_eval_batch_size=4,
-            gradient_accumulation_steps=4,
-            learning_rate=5e-4,
-            num_train_epochs=3,
+            per_device_train_batch_size=2,
+            per_device_eval_batch_size=2,
+            gradient_accumulation_steps=8,
+            learning_rate=1e-4,
+            num_train_epochs=5,
             logging_steps=10,
             eval_strategy="steps",
             eval_steps=30,
@@ -488,27 +575,29 @@ def train_interview_model(output_dir, optimized=False):
             greater_is_better=False,
             report_to="none",
             fp16=True,
-            warmup_steps=50,
-            lr_scheduler_type="cosine",
+            warmup_steps=100,
+            lr_scheduler_type="polynomial",
             optim="adamw_torch",
-            weight_decay=0.01,
-            max_grad_norm=1.0,
-            seed=42
+            weight_decay=0.05,
+            max_grad_norm=0.5,
+            seed=42,
+            gradient_checkpointing=True,
+            label_smoothing_factor=0.1
         )
         
         callbacks = [
-            ImprovedTargetLossCallback(target_loss=1.5),
-            EarlyStoppingCallback(early_stopping_patience=3)
+            ImprovedTargetLossCallback(target_loss=0.8),
+            EarlyStoppingCallback(early_stopping_patience=5)
         ]
     else:
         lora_config = get_lora_config()
         
         training_args = TrainingArguments(
             output_dir=output_dir,
-            per_device_train_batch_size=8,
-            gradient_accumulation_steps=2,
-            learning_rate=2e-4,
-            num_train_epochs=2,
+            per_device_train_batch_size=4,
+            gradient_accumulation_steps=4,
+            learning_rate=5e-5,
+            num_train_epochs=4,
             logging_steps=20,
             eval_strategy="steps",
             eval_steps=50,
@@ -530,7 +619,7 @@ def train_interview_model(output_dir, optimized=False):
         eval_dataset=eval_dataset,
         tokenizer=tokenizer,
         dataset_text_field="text",
-        max_seq_length=256,
+        max_seq_length=384,
         packing=False,
         callbacks=callbacks,
     )
