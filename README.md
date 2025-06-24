@@ -1,20 +1,22 @@
 # AI Job Search Automation
 
-A FastAPI-based application designed to automate the job search process. It leverages AI to parse CVs, match candidates with job postings from multiple sources, and streamline the application process.
+FastAPI-based application that automates job searching with AI-powered features including CV parsing, job matching, salary prediction, and automated cover letter generation.
 
-## Current Progress
+## Features
 
-Implemented and tested the core backend functionality for job searching. Key milestones achieved include:
+- **Job Search API**: Aggregates listings from multiple sources (Adzuna, TheirStack)
+- **User Authentication**: JWT-based secure authentication system
+- **Salary Prediction**: ML model trained on 30K+ job records (RMSE: $13,782)
+- **Cover Letter Generation**: Fine-tuned Qwen2.5-3B model
+- **Interview Prep**: Fine-tuned DialoGPT model for question generation
+- **Geolocation**: Automatic location detection for job searches
 
-- **FastAPI Backend**: A robust server has been set up using FastAPI.
-- **User Authentication**: Secure user registration and login endpoints (`/auth/register`, `/auth/login`) have been implemented using JWT for token-based authentication.
-- **Environment Configuration**: The application now uses a `.env` file to securely manage all secrets and API keys.
-- **Database Setup**: Initial database setup with SQLAlchemy is in place to manage users.
-- **Job Search Endpoint**: A protected `/jobs/search` endpoint has been created. It aggregates job listings from multiple APIs.
-- **API Integration**:
-  - **Adzuna API**: Successfully integrated to fetch job listings.
-  - **TheirStack API**: Successfully integrated to fetch job listings.
-- **Geolocation**: The search endpoint can automatically detect a user's location based on their IP address if one is not provided.
-- **End-to-End Testing**: A test script (`test_job_search_endpoint.py`) has been developed and used to successfully validate the entire authentication and job search pipeline.
+## Training Pipeline
 
-The core job search API pipeline is now fully functional and tested.
+The application includes ML models trained using state-of-the-art techniques:
+
+- **Salary Model**: XGBoost trained on LinkedIn, JobPosting, and Azrai datasets
+- **Cover Letter Model**: Qwen2.5-3B-Instruct with QLoRA optimization
+- **Interview Model**: DialoGPT-medium with LoRA optimization
+
+Training scripts support Kaggle environments with automatic dataset loading and model optimization.

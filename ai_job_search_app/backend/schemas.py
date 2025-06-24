@@ -67,6 +67,7 @@ class CVParsingDetailsResult(BaseModel):
     skills: List[str] = []
     educations: List[Education] = []
     experiences: List[Experience] = []
+    detected_language: Optional[str] = None
 
 # Interview Prep Schemas
 class InterviewPrepRequest(BaseModel):
@@ -137,11 +138,25 @@ class Course(BaseModel):
     title: str
     url: str
     organization: str
+    short_description: Optional[str] = None
+    level: Optional[str] = None
+    skill: Optional[str] = None
 
 class SkillAnalysisRequest(BaseModel):
     job_description: str
 
+class SkillAnalysisSummary(BaseModel):
+    total_required_skills: int
+    total_matched_skills: int
+    total_missing_skills: int
+    skill_coverage: str
+
 class SkillAnalysisResponse(BaseModel):
     matched_skills: List[str]
     missing_skills: List[str]
+    match_score: float
+    user_skill_categories: Dict[str, List[str]]
+    required_skill_categories: Dict[str, List[str]]
+    missing_skill_categories: Dict[str, List[str]]
     recommended_courses: List[Course]
+    analysis_summary: SkillAnalysisSummary
