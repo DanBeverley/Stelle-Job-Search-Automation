@@ -24,14 +24,14 @@ class TrainingConfig:
     
     MAX_LEN = 512
     BATCH_SIZE = 8
-    EPOCHS = 20
-    LEARNING_RATE = 2e-5
+    EPOCHS = 8
+    LEARNING_RATE = 1e-5
     
-    WEIGHT_DECAY = 0.01
-    CLASSIFIER_DROPOUT = 0.3
-    EARLY_STOPPING_PATIENCE = 3
+    WEIGHT_DECAY = 0.02
+    CLASSIFIER_DROPOUT = 0.4
+    EARLY_STOPPING_PATIENCE = 2
     
-    NUM_LAYERS_TO_FREEZE = 4
+    NUM_LAYERS_TO_FREEZE = 6
     
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {DEVICE}")
