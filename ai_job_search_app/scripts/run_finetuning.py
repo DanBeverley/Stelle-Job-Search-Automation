@@ -1,6 +1,7 @@
 import torch
 import os
 import argparse
+import warnings
 
 # Handle potential import issues with graceful fallbacks
 try:
@@ -14,13 +15,19 @@ try:
         EarlyStoppingCallback
     )
     from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-    from trl import SFTTrainer, SFTConfig
+    from trl import SFTTrainer
     from huggingface_hub import login
     IMPORTS_SUCCESSFUL = True
 except ImportError as e:
     print(f"Import error: {e}")
     print("Some dependencies may be incompatible. Please check your environment.")
     IMPORTS_SUCCESSFUL = False
+
+# Suppress specific deprecation warnings from TRL
+warnings.filterwarnings("ignore", message=".*SFTTrainer.*deprecated.*", category=FutureWarning)
+warnings.filterwarnings("ignore", message=".*packing.*", category=UserWarning)
+warnings.filterwarnings("ignore", message=".*max_seq_length.*", category=UserWarning)
+warnings.filterwarnings("ignore", message=".*dataset_text_field.*", category=UserWarning)
 
 # --- Utility Functions ---
 
@@ -155,23 +162,18 @@ def train_cover_letter_model(output_dir, optimized=False):
         )
         callbacks = []
 
-    # Create SFTConfig to avoid deprecated warnings
-    sft_config = SFTConfig(
-        dataset_text_field="Cover Letter",
-        packing=True,
-        max_seq_length=512,
-    )
-
     trainer = SFTTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         peft_config=lora_config,
+        dataset_text_field="Cover Letter",
         tokenizer=tokenizer,
+        packing=True,
+        max_seq_length=512,
         formatting_func=format_cover_letter_prompt,
         callbacks=callbacks,
-        **sft_config.__dict__,  # Unpack SFTConfig to avoid deprecation warnings
     )
 
     trainer.train()
@@ -332,22 +334,17 @@ def train_interview_model(output_dir, optimized=False):
         )
         callbacks = []
 
-    # Create SFTConfig to avoid deprecated warnings
-    sft_config = SFTConfig(
-        dataset_text_field="text",
-        max_seq_length=256,
-        packing=True,
-    )
-
     trainer = SFTTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         peft_config=lora_config,
+        dataset_text_field="text",
+        max_seq_length=256,
         tokenizer=tokenizer,
+        packing=True,
         callbacks=callbacks,
-        **sft_config.__dict__,  # Unpack SFTConfig to avoid deprecation warnings
     )
     
     trainer.train()
