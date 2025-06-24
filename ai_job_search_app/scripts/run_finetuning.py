@@ -117,49 +117,186 @@ def augment_text(text, augment_prob=0.1):
 # --- Cover Letter Model ---
 
 def create_synthetic_cover_letters(n_samples=500):
-    """Create synthetic cover letter data as fallback"""
-    print("Creating synthetic cover letter data...")
+    """Create synthetic cover letter data with much more variety and realism"""
+    set_random_seeds(42)
     
-    job_titles = ["Software Engineer", "Data Scientist", "Product Manager", "Marketing Manager",
-                  "Sales Representative", "Project Manager", "Business Analyst", "UX Designer"]
-    companies = ["Tech Corp", "Innovation Labs", "Global Solutions", "Future Systems",
-                 "Digital Dynamics", "Creative Agency", "StartUp Inc", "Enterprise Co"]
+    job_titles = [
+        "Software Engineer", "Senior Software Engineer", "Full Stack Developer", 
+        "Backend Developer", "Frontend Developer", "DevOps Engineer", 
+        "Data Scientist", "Machine Learning Engineer", "Product Manager",
+        "Technical Lead", "Engineering Manager", "QA Engineer",
+        "Mobile Developer", "Web Developer", "Cloud Engineer",
+        "Cybersecurity Engineer", "Database Administrator", "Systems Analyst",
+        "UI/UX Designer", "Business Analyst", "Project Manager",
+        "Software Architect", "Site Reliability Engineer", "Platform Engineer"
+    ]
     
-    templates = [
-        "Dear Hiring Manager,\n\nI am writing to express my strong interest in the {title} position at {company}. With my background in the field and proven track record of success, I am confident I would be a valuable addition to your team.\n\nI bring extensive experience in relevant areas and have consistently delivered results in my previous roles. My skills align perfectly with your requirements, and I am excited about the opportunity to contribute to {company}'s continued success.\n\nI look forward to discussing how I can contribute to your team.\n\nSincerely,\nApplicant",
-        "Dear {company} Team,\n\nI am excited to apply for the {title} role at your organization. My professional experience and passion for the industry make me an ideal candidate for this position.\n\nThroughout my career, I have developed strong skills that directly relate to this role. I am particularly drawn to {company}'s innovative approach and would be thrilled to contribute to your mission.\n\nThank you for considering my application. I am eager to bring my expertise to your team.\n\nBest regards,\nApplicant"
+    companies = [
+        "Google", "Microsoft", "Amazon", "Apple", "Meta", "Netflix",
+        "Uber", "Airbnb", "Spotify", "Stripe", "Shopify", "Slack",
+        "Zoom", "Dropbox", "Twitter", "LinkedIn", "Adobe", "Salesforce",
+        "Oracle", "IBM", "Tesla", "SpaceX", "Palantir", "Databricks",
+        "Snowflake", "Cloudflare", "MongoDB", "Atlassian", "GitHub",
+        "GitLab", "Docker", "Kubernetes", "Red Hat", "VMware"
+    ]
+    
+    # More varied and realistic cover letter templates
+    cover_letter_templates = [
+        # Template 1: Experience-focused
+        "Dear Hiring Manager,\n\nI am writing to express my strong interest in the {job_title} position at {company}. With {years} years of experience in software development and a proven track record of building scalable applications, I am excited about the opportunity to contribute to your team.\n\nIn my current role, I have successfully led the development of multiple high-impact projects, including implementing microservices architecture that improved system performance by 40% and reduced deployment time by 60%. My expertise in {tech_stack} and passion for clean, maintainable code align perfectly with {company}'s commitment to technical excellence.\n\nI am particularly drawn to {company} because of your innovative approach to solving complex problems and your reputation for fostering a collaborative engineering culture. I would welcome the opportunity to bring my skills in system design, performance optimization, and team leadership to help drive {company}'s continued success.\n\nThank you for considering my application. I look forward to discussing how I can contribute to your team.\n\nBest regards,\n[Your Name]",
+        
+        # Template 2: Project-focused  
+        "Dear {company} Team,\n\nI am excited to apply for the {job_title} role at {company}. Your recent work on {project_area} particularly resonates with my experience building distributed systems and my passion for creating technology that makes a real impact.\n\nDuring my {years} years in software engineering, I've had the opportunity to work on diverse projects ranging from real-time data processing systems handling millions of events per second to user-facing applications serving millions of users. Most recently, I architected and implemented a recommendation engine that increased user engagement by 35% and contributed to a 20% boost in revenue.\n\nWhat excites me most about {company} is your commitment to innovation and the scale of problems you're solving. I'm particularly interested in contributing to your {focus_area} initiatives, where I believe my background in {relevant_tech} and experience with {methodology} would be valuable.\n\nI would love to discuss how my technical skills and problem-solving approach can help {company} continue to push boundaries and deliver exceptional products.\n\nSincerely,\n[Your Name]",
+        
+        # Template 3: Culture-focused
+        "Hello {company} Hiring Team,\n\nI'm writing to apply for the {job_title} position because {company}'s mission to {mission} aligns perfectly with my values and career aspirations. As a software engineer with {years} years of experience, I'm passionate about building technology that solves real-world problems.\n\nThroughout my career, I've thrived in collaborative environments where continuous learning and innovation are encouraged. At my current company, I've mentored junior developers, led technical discussions, and championed best practices that resulted in 50% fewer production incidents and significantly improved code quality.\n\nI'm particularly excited about {company}'s approach to {company_value} and would love to contribute to your team's success. My experience with {technical_skills} and my commitment to writing clean, tested code would enable me to make meaningful contributions from day one.\n\nI believe that great software is built by great teams, and I'm eager to bring my collaborative spirit and technical expertise to {company}.\n\nBest regards,\n[Your Name]",
+        
+        # Template 4: Skills-focused
+        "Dear Hiring Manager,\n\nI am writing to apply for the {job_title} position at {company}. With expertise in {primary_tech}, {secondary_tech}, and {tertiary_tech}, along with {years} years of hands-on experience, I am confident I can make a significant contribution to your engineering team.\n\nMy technical background includes:\n• Designing and implementing scalable backend systems using {backend_tech}\n• Building responsive frontend applications with {frontend_tech}\n• Optimizing database performance and implementing efficient data pipelines\n• Setting up CI/CD pipelines and monitoring systems for production applications\n\nWhat sets me apart is my ability to bridge the gap between technical implementation and business requirements. I've consistently delivered projects on time while maintaining high code quality standards and collaborating effectively with cross-functional teams.\n\n{company}'s reputation for technical innovation and commitment to engineering excellence makes it an ideal place for me to grow my career while contributing to meaningful projects.\n\nI look forward to the opportunity to discuss how my skills and experience can benefit your team.\n\nThank you for your consideration.\n\n[Your Name]",
+        
+        # Template 5: Growth-focused
+        "Dear {company} Team,\n\nI am thrilled to submit my application for the {job_title} role at {company}. As a passionate software engineer with {years} years of experience, I am excited about the opportunity to contribute to your innovative team while continuing to grow my skills in a dynamic environment.\n\nIn my current role, I have gained extensive experience in {tech_area}, successfully delivering projects that have improved system reliability by 45% and reduced response times by 30%. I am particularly proud of my work on {project_type}, where I collaborated with a team of {team_size} engineers to build a solution that now serves over {user_count} users daily.\n\nWhat attracts me most to {company} is your commitment to pushing technological boundaries and your culture of continuous learning. I am eager to take on new challenges, learn from your talented team, and contribute to building products that have a meaningful impact on users' lives.\n\nI am confident that my technical skills, collaborative approach, and enthusiasm for learning make me a strong fit for this role. I would welcome the opportunity to discuss how I can contribute to {company}'s continued success.\n\nWarm regards,\n[Your Name]"
+    ]
+    
+    # Technical stacks and skills
+    tech_stacks = [
+        "Python, Django, PostgreSQL, Redis", "JavaScript, React, Node.js, MongoDB",
+        "Java, Spring Boot, MySQL, Kafka", "Go, Docker, Kubernetes, AWS",
+        "TypeScript, Angular, Express.js, Redis", "C#, .NET Core, SQL Server, Azure",
+        "Rust, PostgreSQL, Docker, GraphQL", "Scala, Akka, Cassandra, Spark",
+        "Python, FastAPI, PostgreSQL, Elasticsearch", "JavaScript, Vue.js, Firebase, GCP"
+    ]
+    
+    focus_areas = [
+        "machine learning", "distributed systems", "cloud infrastructure", "data engineering",
+        "mobile development", "web performance", "security", "DevOps automation",
+        "microservices", "real-time systems", "data visualization", "API design"
+    ]
+    
+    project_areas = [
+        "AI and machine learning", "cloud computing", "developer tools", "data analytics",
+        "mobile technology", "web infrastructure", "cybersecurity", "IoT systems",
+        "blockchain technology", "edge computing", "automation platforms", "search technology"
+    ]
+    
+    company_missions = [
+        "democratize access to information", "connect people worldwide", "accelerate sustainable technology",
+        "empower developers", "transform digital commerce", "revolutionize transportation",
+        "make work more efficient", "improve healthcare outcomes", "advance financial inclusion",
+        "enhance online privacy", "simplify complex workflows", "enable remote collaboration"
+    ]
+    
+    company_values = [
+        "engineering excellence", "user-first design", "rapid innovation", "open-source contribution",
+        "sustainable development", "inclusive culture", "continuous learning", "data-driven decisions",
+        "customer obsession", "technical leadership", "collaborative problem-solving", "quality craftsmanship"
     ]
     
     data = []
-    for _ in range(n_samples):
-        title = random.choice(job_titles)
+    for i in range(n_samples):
+        job_title = random.choice(job_titles)
         company = random.choice(companies)
-        template = random.choice(templates)
-        letter = template.format(title=title, company=company)
+        template = random.choice(cover_letter_templates)
+        
+        # Generate realistic values
+        years = random.randint(2, 12)
+        tech_stack = random.choice(tech_stacks)
+        focus_area = random.choice(focus_areas)
+        project_area = random.choice(project_areas)
+        mission = random.choice(company_missions)
+        company_value = random.choice(company_values)
+        
+        # Split tech stack for more specific references
+        tech_parts = tech_stack.split(", ")
+        primary_tech = tech_parts[0] if len(tech_parts) > 0 else "Python"
+        secondary_tech = tech_parts[1] if len(tech_parts) > 1 else "React"
+        tertiary_tech = tech_parts[2] if len(tech_parts) > 2 else "PostgreSQL"
+        backend_tech = primary_tech
+        frontend_tech = secondary_tech
+        
+        # Additional realistic details
+        team_size = random.randint(3, 8)
+        user_count = random.choice(["10,000", "50,000", "100,000", "500,000", "1 million"])
+        tech_area = random.choice(["backend development", "full-stack development", "cloud engineering", "data engineering"])
+        project_type = random.choice(["a distributed caching system", "a real-time analytics platform", "a microservices architecture", "an API gateway"])
+        methodology = random.choice(["agile development", "test-driven development", "continuous integration", "DevOps practices"])
+        relevant_tech = random.choice(tech_parts[:2])  # Use first 2 tech stack items
+        technical_skills = tech_stack
+        
+        # Fill in the template
+        cover_letter = template.format(
+            job_title=job_title,
+            company=company,
+            years=years,
+            tech_stack=tech_stack,
+            focus_area=focus_area,
+            project_area=project_area,
+            mission=mission,
+            company_value=company_value,
+            primary_tech=primary_tech,
+            secondary_tech=secondary_tech,
+            tertiary_tech=tertiary_tech,
+            backend_tech=backend_tech,
+            frontend_tech=frontend_tech,
+            team_size=team_size,
+            user_count=user_count,
+            tech_area=tech_area,
+            project_type=project_type,
+            methodology=methodology,
+            relevant_tech=relevant_tech,
+            technical_skills=technical_skills
+        )
         
         data.append({
-            "Job Title": title,
+            "Job Title": job_title,
             "Hiring Company": company,
-            "Cover Letter": letter
+            "Cover Letter": cover_letter
         })
     
+    print(f"Created {len(data)} synthetic cover letter examples")
     return Dataset.from_list(data)
+
+def load_dataset_with_retry(dataset_name, max_retries=3, timeout_seconds=60):
+    """Load dataset with proper retry mechanism for HuggingFace datasets"""
+    import time
+    
+    for attempt in range(max_retries):
+        try:
+            print(f"Attempting to load dataset '{dataset_name}' (attempt {attempt + 1}/{max_retries})")
+            
+            # First try: Direct download with timeout
+            download_config = DownloadConfig(
+                max_retries=2,
+                num_proc=1,
+                resume_download=True,
+                timeout=timeout_seconds
+            )
+            
+            dataset = load_dataset(
+                dataset_name, 
+                split="train",
+                download_config=download_config,
+                trust_remote_code=True  # In case dataset needs custom code
+            )
+            
+            print(f"✅ Successfully loaded dataset '{dataset_name}' with {len(dataset)} examples")
+            return dataset
+            
+        except Exception as e:
+            print(f"❌ Attempt {attempt + 1} failed: {e}")
+            
+            if attempt < max_retries - 1:
+                wait_time = (2 ** attempt) * 30  # Exponential backoff: 30s, 60s, 120s
+                print(f"⏳ Waiting {wait_time}s before next attempt...")
+                time.sleep(wait_time)
+            else:
+                print(f"💡 All {max_retries} attempts failed. Will use synthetic data instead.")
+                raise e
 
 def prepare_cover_letter_data(dataset_name, cache_dir):
     try:
-        download_config = DownloadConfig(
-            max_retries=3,
-            num_proc=1,
-            resume_download=True
-        )
-        
-        dataset = download_with_retry(
-            load_dataset,
-            dataset_name,
-            split="train",
-            cache_dir=cache_dir,
-            download_config=download_config
-        )
+        # Use proper dataset loading with retry
+        dataset = load_dataset_with_retry(dataset_name, max_retries=3, timeout_seconds=90)
         
         dataset = dataset.shuffle(seed=42)
         split_dataset = dataset.train_test_split(test_size=0.1, seed=42)
@@ -170,6 +307,8 @@ def prepare_cover_letter_data(dataset_name, cache_dir):
         train_dataset = split_dataset['train'].select(range(train_size))
         eval_dataset = split_dataset['test'].select(range(eval_size))
         
+        print(f"✅ Using real HuggingFace dataset: {len(train_dataset)} train, {len(eval_dataset)} eval examples")
+        
     except Exception as e:
         print(f"Failed to load dataset from HuggingFace: {e}")
         print("Using synthetic data instead...")
@@ -178,6 +317,8 @@ def prepare_cover_letter_data(dataset_name, cache_dir):
         split_dataset = dataset.train_test_split(test_size=0.1, seed=42)
         train_dataset = split_dataset['train']
         eval_dataset = split_dataset['test']
+        
+        print(f"🔧 Using synthetic dataset: {len(train_dataset)} train, {len(eval_dataset)} eval examples")
     
     def process_example(example):
         job_title = example.get('Job Title', 'Unknown Position')
@@ -205,7 +346,7 @@ def prepare_cover_letter_data(dataset_name, cache_dir):
     train_dataset = train_dataset.filter(lambda x: len(x['text']) > 100)
     eval_dataset = eval_dataset.filter(lambda x: len(x['text']) > 100)
     
-    print(f"Training with {len(train_dataset)} examples, evaluating on {len(eval_dataset)} examples")
+    print(f"Final dataset sizes: {len(train_dataset)} training examples, {len(eval_dataset)} evaluation examples")
     
     return train_dataset, eval_dataset
 
