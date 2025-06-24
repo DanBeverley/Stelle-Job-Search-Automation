@@ -10,14 +10,17 @@ try:
     from datasets import load_dataset, Dataset
     from transformers import (
         AutoModelForCausalLM, 
-        AutoTokenizer, 
+        AutoTokenizer,
+        GPT2LMHeadModel,
+        GPT2Tokenizer,
         BitsAndBytesConfig, 
         TrainingArguments,
         TrainerCallback,
-        EarlyStoppingCallback
+        EarlyStoppingCallback,
+        DataCollatorForLanguageModeling
     )
-    from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-    from trl import SFTTrainer
+    from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training, TaskType
+    from trl import SFTTrainer, DataCollatorForCompletionOnlyLM
     from huggingface_hub import login
     IMPORTS_SUCCESSFUL = True
 except ImportError as e:
@@ -45,20 +48,19 @@ def get_quantization_config():
     return BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.bfloat16,
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_quant_storage=torch.uint8
+        bnb_4bit_compute_dtype=torch.float16,
+        bnb_4bit_use_double_quant=False
     )
 
-def get_lora_config(r, lora_alpha, target_modules, lora_dropout):
+def get_lora_config(r=16, lora_alpha=32, lora_dropout=0.05):
     """Returns the LoRA configuration."""
     return LoraConfig(
         r=r,
         lora_alpha=lora_alpha,
-        target_modules=target_modules,
+        target_modules=["c_attn", "c_proj"],
         lora_dropout=lora_dropout,
         bias="none",
-        task_type="CAUSAL_LM"
+        task_type=TaskType.CAUSAL_LM
     )
 
 # Data augmentation functions
@@ -86,15 +88,27 @@ def prepare_cover_letter_data(dataset_name, cache_dir):
     dataset = dataset.shuffle(seed=42)
     
     # Reasonable dataset size - enough to learn patterns but small enough to memorize
-    split_dataset = dataset.train_test_split(test_size=0.15, seed=42)
+    split_dataset = dataset.train_test_split(test_size=0.1, seed=42)
     
-    train_size = min(200, len(split_dataset['train']))  # 200 examples - reasonable for memorization
-    eval_size = min(40, len(split_dataset['test']))     # 40 for evaluation
+    train_size = min(500, len(split_dataset['train']))  # 500 examples - reasonable for memorization
+    eval_size = min(50, len(split_dataset['test']))     # 50 for evaluation
     
     train_dataset = split_dataset['train'].select(range(train_size))
     eval_dataset = split_dataset['test'].select(range(eval_size))
     
-    print(f"Training with {train_size} examples, evaluating on {eval_size} examples")
+    def process_example(example):
+        job_title = example.get('Job Title', 'Unknown Position')
+        company = example.get('Hiring Company', 'Unknown Company')
+        cover_letter = example.get('Cover Letter', '')
+        
+        text = f"Write a cover letter for {job_title} position at {company}.\n\nCover Letter:\n{cover_letter}\n"
+        
+        return {"text": text}
+    
+    train_dataset = train_dataset.map(process_example)
+    eval_dataset = eval_dataset.map(process_example)
+    
+    print(f"Training with {len(train_dataset)} examples, evaluating on {len(eval_dataset)} examples")
     
     return train_dataset, eval_dataset
 
@@ -115,16 +129,15 @@ Company: {company}
 
 ### End"""
 
-class TargetLossCallback(TrainerCallback):
+class ImprovedTargetLossCallback(TrainerCallback):
     """Callback that stops training when target loss is achieved."""
-    def __init__(self, target_loss=0.3):
+    def __init__(self, target_loss=1.5):
         self.target_loss = target_loss
         self.best_eval_loss = float('inf')
         self.patience_counter = 0
-        self.max_patience = 4
+        self.max_patience = 5
         
     def on_evaluate(self, args, state, control, model=None, logs=None, **kwargs):
-        # Fix: Check if logs exists and has eval_loss
         if logs is None or 'eval_loss' not in logs:
             return
             
@@ -137,122 +150,103 @@ class TargetLossCallback(TrainerCallback):
             control.should_training_stop = True
             return
             
-        if current_eval_loss >= self.best_eval_loss:
-            self.patience_counter += 1
-            print(f"No improvement: {self.patience_counter}/{self.max_patience}")
-            if self.patience_counter >= self.max_patience:
-                print("Stopping: No progress toward target")
-                control.should_training_stop = True
-        else:
+        if current_eval_loss < self.best_eval_loss:
             self.best_eval_loss = current_eval_loss
             self.patience_counter = 0
             print(f"New best: {current_eval_loss:.4f}")
+        else:
+            self.patience_counter += 1
+            if self.patience_counter >= self.max_patience:
+                print("Early stopping: No improvement")
+                control.should_training_stop = True
 
 def train_cover_letter_model(output_dir, optimized=False):
     """Balanced training approach for sub-0.8 loss."""
     set_random_seeds(42)
     
-    MODEL_ID = "microsoft/DialoGPT-medium"
+    MODEL_ID = "gpt2"
     CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
 
     train_dataset, eval_dataset = prepare_cover_letter_data("ShashiVish/cover-letter-dataset", CACHE_DIR)
     
-    bnb_config = get_quantization_config()
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, cache_dir=CACHE_DIR)
+    tokenizer = GPT2Tokenizer.from_pretrained(MODEL_ID, cache_dir=CACHE_DIR)
     tokenizer.pad_token = tokenizer.eos_token
-    model = AutoModelForCausalLM.from_pretrained(MODEL_ID, quantization_config=bnb_config, device_map="auto", cache_dir=CACHE_DIR)
-
+    tokenizer.padding_side = "left"
+    
+    model = GPT2LMHeadModel.from_pretrained(
+        MODEL_ID,
+        cache_dir=CACHE_DIR,
+        torch_dtype=torch.float16,
+        device_map="auto"
+    )
+    
+    model.config.use_cache = False
+    
     if optimized:
-        # Balanced configuration for sub-0.8 loss
-        lora_config = get_lora_config(
-            r=8,
-            lora_alpha=16,
-            target_modules=["c_attn", "c_proj", "c_fc"],
-            lora_dropout=0.05
-        )
+        lora_config = get_lora_config(r=32, lora_alpha=64, lora_dropout=0.1)
         
         training_args = TrainingArguments(
             output_dir=output_dir,
-            per_device_train_batch_size=1,
-            per_device_eval_batch_size=1,
+            per_device_train_batch_size=4,
+            per_device_eval_batch_size=4,
             gradient_accumulation_steps=4,
-            learning_rate=2e-5,
-            max_steps=100,
-            logging_steps=5,
+            learning_rate=5e-4,
+            num_train_epochs=3,
+            logging_steps=10,
             eval_strategy="steps",
-            eval_steps=10,
+            eval_steps=50,
             save_strategy="steps",
-            save_steps=20,
+            save_steps=100,
             save_total_limit=2,
             load_best_model_at_end=True,
             metric_for_best_model="eval_loss",
             greater_is_better=False,
             report_to="none",
             fp16=True,
-            dataloader_pin_memory=False,
-            dataloader_num_workers=0,
-            weight_decay=0.001,
-            warmup_ratio=0.03,
+            warmup_steps=100,
             lr_scheduler_type="cosine",
             optim="adamw_torch",
-            gradient_checkpointing=True,
-            remove_unused_columns=True,
-            max_grad_norm=0.3,
-            dataloader_drop_last=True,
-            eval_accumulation_steps=1,
-            prediction_loss_only=True,
+            weight_decay=0.01,
+            max_grad_norm=1.0,
+            seed=42
         )
         
         callbacks = [
-            TargetLossCallback(target_loss=0.3),
-            EarlyStoppingCallback(early_stopping_patience=3, early_stopping_threshold=0.005)
+            ImprovedTargetLossCallback(target_loss=1.5),
+            EarlyStoppingCallback(early_stopping_patience=3)
         ]
     else:
-        # Standard configuration
-        lora_config = get_lora_config(r=16, lora_alpha=32, target_modules=["c_attn", "c_proj"], lora_dropout=0.1)
+        lora_config = get_lora_config()
         
         training_args = TrainingArguments(
             output_dir=output_dir,
-            per_device_train_batch_size=2,
-            per_device_eval_batch_size=2,
-            gradient_accumulation_steps=4,
-            learning_rate=1e-4,
-            max_steps=80,
-            logging_steps=10,
+            per_device_train_batch_size=8,
+            gradient_accumulation_steps=2,
+            learning_rate=2e-4,
+            num_train_epochs=2,
+            logging_steps=20,
             eval_strategy="steps",
-            eval_steps=20,
-            save_strategy="steps",
-            save_steps=40,
-            save_total_limit=1,
-            load_best_model_at_end=True,
+            eval_steps=100,
+            save_strategy="epoch",
             report_to="none",
             fp16=True,
-            dataloader_pin_memory=False,
-            dataloader_num_workers=0,
-            weight_decay=0.01,
             warmup_ratio=0.1,
-            lr_scheduler_type="cosine",
-            optim="adamw_torch",
-            gradient_checkpointing=True,
-            remove_unused_columns=True,
-            max_grad_norm=1.0
+            seed=42
         )
         callbacks = []
     
-    model = prepare_model_for_kbit_training(model)
     model = get_peft_model(model, lora_config)
+    model.print_trainable_parameters()
 
     trainer = SFTTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        peft_config=lora_config,
-        dataset_text_field="Cover Letter",
         tokenizer=tokenizer,
-        packing=False,
+        dataset_text_field="text",
         max_seq_length=512,
-        formatting_func=format_cover_letter_prompt,
+        packing=False,
         callbacks=callbacks,
     )
 
@@ -266,67 +260,51 @@ def prepare_interview_data(dataset_name):
     """Balanced synthetic data for controlled learning."""
     set_random_seeds(42)
     
-    job_roles = ["Software Engineer", "Data Scientist", "DevOps Engineer", "Frontend Developer", 
-                 "Backend Developer", "Full Stack Developer", "Machine Learning Engineer", 
-                 "Cloud Architect", "Product Manager", "QA Engineer"]
-    
-    technical_skills = ["Python", "JavaScript", "React", "Node.js", "Java", "SQL", "AWS", 
-                       "Docker", "Kubernetes", "Git", "REST APIs", "MongoDB", "PostgreSQL", 
-                       "Machine Learning", "Data Analysis", "System Design"]
-    
-    question_templates = [
-        "Tell me about your experience with {}.",
-        "How would you approach a {} project?",
-        "Describe your {} development process.",
-        "What challenges have you faced with {}?",
-        "How do you stay updated with {} technologies?",
-        "Explain a {} concept to someone new.",
-        "What's your preferred {} workflow?",
-        "How do you troubleshoot {} issues?",
-        "Describe a successful {} implementation.",
-        "What {} best practices do you follow?"
+    questions_and_answers = [
+        ("Tell me about yourself", "I am a dedicated professional with expertise in software development and a passion for creating innovative solutions."),
+        ("Why do you want this position?", "I am excited about this opportunity because it aligns with my skills and career goals, allowing me to contribute meaningfully to your team."),
+        ("What are your strengths?", "My key strengths include problem-solving, adaptability, and strong communication skills that help me work effectively in team environments."),
+        ("Where do you see yourself in 5 years?", "In 5 years, I see myself having grown professionally within your organization, taking on leadership responsibilities and contributing to strategic initiatives."),
+        ("Why are you leaving your current job?", "I'm seeking new challenges and opportunities for growth that align better with my long-term career objectives."),
+        ("Tell me about a challenge you overcame", "I successfully led a critical project under tight deadlines by implementing efficient processes and fostering team collaboration."),
+        ("What motivates you?", "I'm motivated by solving complex problems, continuous learning, and seeing the positive impact of my work on users and colleagues."),
+        ("How do you handle stress?", "I manage stress through prioritization, clear communication, and maintaining a balanced perspective on challenges."),
+        ("Describe your ideal work environment", "I thrive in collaborative environments that encourage innovation, provide learning opportunities, and value open communication."),
+        ("What are your salary expectations?", "I'm looking for compensation that reflects my experience and the value I'll bring to your organization, and I'm open to discussing your range.")
     ]
     
-    response_templates = [
-        "I have {} years of hands-on experience with {} where I've successfully delivered multiple projects. My approach focuses on clean code, testing, and scalable solutions.",
-        "I start by understanding requirements, then design the architecture considering scalability and maintainability. I use {} methodologies and ensure proper documentation throughout.",
-        "My development process involves planning, iterative development, code reviews, and continuous testing. I prioritize {} principles and maintain high code quality standards.",
-        "I've encountered challenges with {} complexity, which I solved by breaking down problems systematically and leveraging {} tools for optimization.",
-        "I regularly follow {} blogs, participate in developer communities, contribute to open source, and take online courses to stay current with evolving technologies.",
-        "I explain {} by starting with fundamental concepts, using practical examples, and gradually building complexity. Visual aids and hands-on demonstrations help reinforce understanding.",
-        "I prefer {} workflows that emphasize collaboration, version control, automated testing, and continuous integration to ensure reliable and efficient development cycles.",
-        "I approach {} troubleshooting methodically: reproduce the issue, analyze logs, isolate components, test hypotheses, and implement fixes with proper validation.",
-        "I successfully implemented {} by following best practices, conducting thorough testing, monitoring performance, and gathering user feedback for continuous improvement.",
-        "I follow {} industry standards including code reviews, documentation, security practices, performance optimization, and maintaining clean, readable, and maintainable code."
-    ]
+    skills = ["Python", "JavaScript", "React", "Java", "SQL", "AWS", "Docker", "Machine Learning", "Data Analysis", "Project Management"]
     
     synthetic_data = []
-    for role in job_roles:
-        for skill in technical_skills[:8]:
-            for i, template in enumerate(question_templates[:6]):
-                question = template.format(skill)
-                response = response_templates[i % len(response_templates)].format(
-                    random.choice(["2-3", "3-5", "5+"]), skill, 
-                    random.choice(["Agile", "DevOps", "SOLID", "DRY", "KISS"])
-                )
-                
-                synthetic_data.append({
-                    "text": f"""### Interview Question:
-{question}
-
-### Professional Response:
-{response}
-
-### End"""
-                })
+    
+    for q, a in questions_and_answers:
+        for _ in range(5):
+            synthetic_data.append({
+                "text": f"Interview Question: {q}\n\nAnswer: {a}\n"
+            })
+    
+    for skill in skills:
+        questions = [
+            f"What is your experience with {skill}?",
+            f"How do you approach {skill} projects?",
+            f"Describe a {skill} challenge you solved."
+        ]
+        
+        answers = [
+            f"I have extensive experience with {skill}, having worked on multiple projects that required deep knowledge of its capabilities.",
+            f"I approach {skill} projects by first understanding requirements, then designing scalable solutions using best practices.",
+            f"I once resolved a complex {skill} issue by analyzing the problem systematically and implementing an optimized solution."
+        ]
+        
+        for q, a in zip(questions, answers):
+            synthetic_data.append({
+                "text": f"Interview Question: {q}\n\nAnswer: {a}\n"
+            })
     
     print(f"Generated {len(synthetic_data)} interview examples")
     
     dataset = Dataset.from_list(synthetic_data)
-    split_dataset = dataset.train_test_split(test_size=0.15, seed=42)
-    
-    print(f"Training examples: {len(split_dataset['train'])}")
-    print(f"Evaluation examples: {len(split_dataset['test'])}")
+    split_dataset = dataset.train_test_split(test_size=0.1, seed=42)
     
     return split_dataset['train'], split_dataset['test']
 
@@ -334,104 +312,86 @@ def train_interview_model(output_dir, optimized=False):
     """Balanced training for sub-0.8 loss."""
     set_random_seeds(42)
     
-    MODEL_ID = "microsoft/DialoGPT-medium"
+    MODEL_ID = "gpt2"
 
     train_dataset, eval_dataset = prepare_interview_data("synthetic")
     
-    bnb_config = get_quantization_config()
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
+    tokenizer = GPT2Tokenizer.from_pretrained(MODEL_ID)
     tokenizer.pad_token = tokenizer.eos_token
-    model = AutoModelForCausalLM.from_pretrained(MODEL_ID, quantization_config=bnb_config, device_map="auto")
+    tokenizer.padding_side = "left"
+    
+    model = GPT2LMHeadModel.from_pretrained(
+        MODEL_ID,
+        torch_dtype=torch.float16,
+        device_map="auto"
+    )
+    
     model.config.use_cache = False
 
     if optimized:
-        # Balanced configuration for sub-0.8 loss
-        lora_config = get_lora_config(
-            r=8,
-            lora_alpha=16,
-            target_modules=["c_attn", "c_proj", "c_fc"],
-            lora_dropout=0.05
-        )
+        lora_config = get_lora_config(r=32, lora_alpha=64, lora_dropout=0.1)
         
         training_args = TrainingArguments(
             output_dir=output_dir,
-            per_device_train_batch_size=1,
-            per_device_eval_batch_size=1,
+            per_device_train_batch_size=4,
+            per_device_eval_batch_size=4,
             gradient_accumulation_steps=4,
-            learning_rate=2e-5,
-            max_steps=80,
-            logging_steps=5,
+            learning_rate=5e-4,
+            num_train_epochs=3,
+            logging_steps=10,
             eval_strategy="steps",
-            eval_steps=10,
+            eval_steps=30,
             save_strategy="steps",
-            save_steps=20,
+            save_steps=60,
             save_total_limit=2,
             load_best_model_at_end=True,
             metric_for_best_model="eval_loss",
             greater_is_better=False,
             report_to="none",
             fp16=True,
-            dataloader_pin_memory=False,
-            dataloader_num_workers=0,
-            weight_decay=0.001,
-            warmup_ratio=0.03,
+            warmup_steps=50,
             lr_scheduler_type="cosine",
             optim="adamw_torch",
-            gradient_checkpointing=True,
-            remove_unused_columns=True,
-            max_grad_norm=0.3,
-            dataloader_drop_last=True,
-            eval_accumulation_steps=1,
-            prediction_loss_only=True,
+            weight_decay=0.01,
+            max_grad_norm=1.0,
+            seed=42
         )
         
         callbacks = [
-            TargetLossCallback(target_loss=0.3),
-            EarlyStoppingCallback(early_stopping_patience=3, early_stopping_threshold=0.005)
+            ImprovedTargetLossCallback(target_loss=1.5),
+            EarlyStoppingCallback(early_stopping_patience=3)
         ]
     else:
-        lora_config = get_lora_config(r=16, lora_alpha=32, target_modules=["c_attn", "c_proj"], lora_dropout=0.1)
+        lora_config = get_lora_config()
         
         training_args = TrainingArguments(
             output_dir=output_dir,
-            per_device_train_batch_size=2,
-            per_device_eval_batch_size=2,
-            gradient_accumulation_steps=4,
-            learning_rate=1e-4,
-            max_steps=60,
-            logging_steps=10,
+            per_device_train_batch_size=8,
+            gradient_accumulation_steps=2,
+            learning_rate=2e-4,
+            num_train_epochs=2,
+            logging_steps=20,
             eval_strategy="steps",
-            eval_steps=15,
-            save_strategy="steps",
-            save_steps=30,
-            save_total_limit=1,
-            load_best_model_at_end=True,
+            eval_steps=50,
+            save_strategy="epoch",
             report_to="none",
             fp16=True,
-            dataloader_pin_memory=False,
-            dataloader_num_workers=0,
-            weight_decay=0.01,
             warmup_ratio=0.1,
-            lr_scheduler_type="cosine",
-            optim="adamw_torch",
-            gradient_checkpointing=True,
-            remove_unused_columns=True,
-            max_grad_norm=1.0
+            seed=42
         )
         callbacks = []
     
-    model = prepare_model_for_kbit_training(model)
     model = get_peft_model(model, lora_config)
+    model.print_trainable_parameters()
 
     trainer = SFTTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        peft_config=lora_config,
-        dataset_text_field="text",
-        max_seq_length=384,
         tokenizer=tokenizer,
+        dataset_text_field="text",
+        max_seq_length=256,
         packing=False,
         callbacks=callbacks,
     )
@@ -452,7 +412,7 @@ def main():
     parser.add_argument("--model_type", type=str, required=True, choices=["cover_letter", "interview"])
     parser.add_argument("--output_dir", type=str, required=True)
     parser.add_argument("--hf_token", type=str, help="Hugging Face token")
-    parser.add_argument("--optimized", action="store_true", help="Optimized mode for sub-0.3 loss target")
+    parser.add_argument("--optimized", action="store_true", help="Optimized mode for better performance")
     args = parser.parse_args()
 
     # Hugging Face Login
@@ -467,9 +427,9 @@ def main():
             print(f"Failed to authenticate: {e}")
 
     if args.optimized:
-        print("Optimized mode: Targeting sub-0.3 loss for production quality")
+        print("Optimized mode: Enhanced training for better performance")
     else:
-        print("Standard mode: Conservative training approach")
+        print("Standard mode: Quick training")
 
     if args.model_type == "cover_letter":
         print("--- Starting Cover Letter Model Fine-Tuning ---")
