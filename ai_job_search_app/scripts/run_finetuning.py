@@ -259,94 +259,232 @@ def create_synthetic_cover_letters(n_samples=500):
 def load_dataset_with_retry(dataset_name, max_retries=3, timeout_seconds=60):
     """Load dataset with proper retry mechanism for HuggingFace datasets"""
     import time
+    import os
     
     for attempt in range(max_retries):
         try:
             print(f"Attempting to load dataset '{dataset_name}' (attempt {attempt + 1}/{max_retries})")
             
-            # First try: Direct download with timeout
+            # Set environment variable for timeout instead
+            os.environ['HF_HUB_DOWNLOAD_TIMEOUT'] = str(timeout_seconds)
+            
+            # Create download config without timeout parameter (this was the issue!)
             download_config = DownloadConfig(
                 max_retries=2,
                 num_proc=1,
                 resume_download=True,
-                timeout=timeout_seconds
+                # Remove timeout parameter - it doesn't exist!
             )
             
-            dataset = load_dataset(
-                dataset_name, 
-                split="train",
-                download_config=download_config,
-                trust_remote_code=True  # In case dataset needs custom code
-            )
-            
-            print(f"✅ Successfully loaded dataset '{dataset_name}' with {len(dataset)} examples")
-            return dataset
+            # Try different approaches in sequence
+            for split_name in ["train", None]:  # Try train split first, then default
+                try:
+                    dataset = load_dataset(
+                        dataset_name, 
+                        split=split_name,
+                        download_config=download_config,
+                        trust_remote_code=True,
+                        streaming=False  # Force full download
+                    )
+                    
+                    # Convert to regular dataset if it's iterable
+                    if hasattr(dataset, '__iter__') and not hasattr(dataset, '__len__'):
+                        dataset = Dataset.from_generator(lambda: dataset)
+                    
+                    if len(dataset) > 0:
+                        print(f"✅ Successfully loaded dataset '{dataset_name}' with {len(dataset)} examples")
+                        return dataset
+                    else:
+                        print(f"⚠️ Dataset loaded but empty, trying next approach...")
+                        continue
+                        
+                except Exception as split_error:
+                    print(f"⚠️ Failed with split '{split_name}': {split_error}")
+                    continue
             
         except Exception as e:
+            error_msg = str(e).lower()
             print(f"❌ Attempt {attempt + 1} failed: {e}")
             
+            # Check if it's a network/timeout issue
+            if any(keyword in error_msg for keyword in ['timeout', 'connection', 'network', 'unreachable']):
+                if attempt < max_retries - 1:
+                    wait_time = (2 ** attempt) * 30  # Exponential backoff: 30s, 60s, 120s
+                    print(f"⏳ Network issue detected. Waiting {wait_time}s before next attempt...")
+                    time.sleep(wait_time)
+                    continue
+            
+            # For other errors, try offline mode if available
+            if attempt == max_retries - 1:
+                try:
+                    print("🔄 Trying offline mode as final attempt...")
+                    dataset = load_dataset(dataset_name, split="train", local_files_only=True)
+                    if len(dataset) > 0:
+                        print(f"✅ Loaded from cache: {len(dataset)} examples")
+                        return dataset
+                except:
+                    pass
+            
             if attempt < max_retries - 1:
-                wait_time = (2 ** attempt) * 30  # Exponential backoff: 30s, 60s, 120s
+                wait_time = 15 * (attempt + 1)
                 print(f"⏳ Waiting {wait_time}s before next attempt...")
                 time.sleep(wait_time)
             else:
                 print(f"💡 All {max_retries} attempts failed. Will use synthetic data instead.")
                 raise e
 
+def load_real_cover_letter_data_alternative():
+    """Try alternative methods to load real cover letter data"""
+    alternative_datasets = [
+        "ShashiVish/cover-letter-dataset",
+        "susanQQ/cover-letter-dataset", 
+        "cover-letter-dataset/cover-letter-dataset",
+        "career-datasets/cover-letters"
+    ]
+    
+    for dataset_name in alternative_datasets:
+        try:
+            print(f"🔍 Trying alternative dataset: {dataset_name}")
+            dataset = load_dataset_with_retry(dataset_name, max_retries=2, timeout_seconds=120)
+            
+            # Check if dataset has reasonable structure
+            if len(dataset) > 10:  # At least 10 examples
+                first_example = dataset[0]
+                # Look for relevant columns
+                relevant_cols = []
+                for col in first_example.keys():
+                    if any(keyword in col.lower() for keyword in ['cover', 'letter', 'text', 'content']):
+                        relevant_cols.append(col)
+                
+                if relevant_cols:
+                    print(f"✅ Found viable dataset: {dataset_name} with {len(dataset)} examples")
+                    print(f"Relevant columns: {relevant_cols}")
+                    return dataset, dataset_name
+                    
+        except Exception as e:
+            print(f"❌ Failed to load {dataset_name}: {e}")
+            continue
+    
+    return None, None
+
 def prepare_cover_letter_data(dataset_name, cache_dir):
+    # First, try the main dataset
+    dataset = None
+    actual_dataset_name = dataset_name
+    use_synthetic = False
+    
     try:
-        # Use proper dataset loading with retry
-        dataset = load_dataset_with_retry(dataset_name, max_retries=3, timeout_seconds=90)
-        
-        dataset = dataset.shuffle(seed=42)
-        split_dataset = dataset.train_test_split(test_size=0.1, seed=42)
-        
-        train_size = min(800, len(split_dataset['train']))
-        eval_size = min(100, len(split_dataset['test']))
-        
-        train_dataset = split_dataset['train'].select(range(train_size))
-        eval_dataset = split_dataset['test'].select(range(eval_size))
-        
-        print(f"✅ Using real HuggingFace dataset: {len(train_dataset)} train, {len(eval_dataset)} eval examples")
+        # Use improved dataset loading with retry
+        dataset = load_dataset_with_retry(dataset_name, max_retries=3, timeout_seconds=120)
+        print(f"✅ Successfully loaded primary dataset: {dataset_name}")
         
     except Exception as e:
-        print(f"Failed to load dataset from HuggingFace: {e}")
-        print("Using synthetic data instead...")
+        print(f"❌ Failed to load primary dataset: {e}")
         
-        dataset = create_synthetic_cover_letters(1000)
-        split_dataset = dataset.train_test_split(test_size=0.1, seed=42)
+        # Try alternative datasets
+        print("🔍 Searching for alternative datasets...")
+        dataset, actual_dataset_name = load_real_cover_letter_data_alternative()
+        
+        if dataset is None:
+            print("❌ All real datasets failed. Using synthetic data...")
+            use_synthetic = True
+    
+    if use_synthetic:
+        # Use synthetic data as last resort
+        dataset = create_synthetic_cover_letters(1200)  # Larger synthetic dataset
+        split_dataset = dataset.train_test_split(test_size=0.12, seed=42)
         train_dataset = split_dataset['train']
         eval_dataset = split_dataset['test']
         
-        print(f"🔧 Using synthetic dataset: {len(train_dataset)} train, {len(eval_dataset)} eval examples")
+        print(f"🔧 Using enhanced synthetic dataset: {len(train_dataset)} train, {len(eval_dataset)} eval examples")
+    else:
+        # Process real dataset
+        print(f"📊 Processing real dataset: {actual_dataset_name}")
+        
+        # Shuffle and split the real dataset
+        dataset = dataset.shuffle(seed=42)
+        
+        # Use larger portion of real data if available
+        total_size = len(dataset)
+        train_size = min(1500, int(total_size * 0.85))  # Use up to 1500 training examples
+        
+        if total_size > train_size:
+            # Split if we have enough data
+            split_dataset = dataset.train_test_split(test_size=0.15, seed=42)
+            train_dataset = split_dataset['train'].select(range(min(train_size, len(split_dataset['train']))))
+            eval_dataset = split_dataset['test'].select(range(min(200, len(split_dataset['test']))))
+        else:
+            # Use most for training if dataset is small
+            split_point = max(10, int(total_size * 0.1))  # Reserve at least 10 for eval
+            train_dataset = dataset.select(range(total_size - split_point))
+            eval_dataset = dataset.select(range(total_size - split_point, total_size))
+        
+        print(f"✅ Using real dataset: {len(train_dataset)} train, {len(eval_dataset)} eval examples")
     
-    def process_example(example):
-        job_title = example.get('Job Title', 'Unknown Position')
-        company = example.get('Hiring Company', 'Unknown Company')
-        cover_letter = example.get('Cover Letter', '').strip()
+    # Improved data processing function
+    def process_example_advanced(example):
+        # Try different column name patterns for cover letters
+        cover_letter_text = ""
+        job_title = "Software Engineer"  # Default
+        company = "Technology Company"   # Default
         
-        if len(cover_letter) < 50:
-            cover_letter = f"I am writing to apply for the {job_title} position at {company}. I believe my skills and experience make me an excellent candidate for this role."
+        # Look for cover letter content in various column names
+        possible_text_cols = ['Cover Letter', 'cover_letter', 'text', 'content', 'letter', 'body']
+        for col in possible_text_cols:
+            if col in example and example[col] and len(str(example[col]).strip()) > 30:
+                cover_letter_text = str(example[col]).strip()
+                break
         
+        # Look for job title
+        possible_job_cols = ['Job Title', 'job_title', 'title', 'position', 'role']
+        for col in possible_job_cols:
+            if col in example and example[col]:
+                job_title = str(example[col]).strip()
+                break
+        
+        # Look for company
+        possible_company_cols = ['Hiring Company', 'company', 'organization', 'employer']
+        for col in possible_company_cols:
+            if col in example and example[col]:
+                company = str(example[col]).strip()
+                break
+        
+        # If no cover letter found, create a template
+        if not cover_letter_text or len(cover_letter_text) < 50:
+            cover_letter_text = f"""Dear Hiring Manager,
+
+I am writing to express my strong interest in the {job_title} position at {company}. With my background in software development and passion for technology, I believe I would be a valuable addition to your team.
+
+In my previous experience, I have developed strong skills in programming, problem-solving, and teamwork. I am particularly drawn to {company} because of its reputation for innovation and commitment to excellence.
+
+I would welcome the opportunity to discuss how my skills and enthusiasm can contribute to your team's success. Thank you for considering my application.
+
+Sincerely,
+[Your Name]"""
+        
+        # Create structured prompt for better training
         instruction = f"Write a professional cover letter for the {job_title} position at {company}."
         
+        # Use improved formatting for better model training
         text = f"""### Instruction:
 {instruction}
 
 ### Response:
-{cover_letter}
+{cover_letter_text}
 
 ### End"""
         
         return {"text": text}
     
-    train_dataset = train_dataset.map(process_example, remove_columns=train_dataset.column_names)
-    eval_dataset = eval_dataset.map(process_example, remove_columns=eval_dataset.column_names)
+    # Apply processing to both datasets
+    train_dataset = train_dataset.map(process_example_advanced, remove_columns=train_dataset.column_names)
+    eval_dataset = eval_dataset.map(process_example_advanced, remove_columns=eval_dataset.column_names)
     
-    train_dataset = train_dataset.filter(lambda x: len(x['text']) > 100)
-    eval_dataset = eval_dataset.filter(lambda x: len(x['text']) > 100)
+    # Filter out examples that are too short (better quality control)
+    train_dataset = train_dataset.filter(lambda x: len(x['text']) > 150)
+    eval_dataset = eval_dataset.filter(lambda x: len(x['text']) > 150)
     
-    print(f"Final dataset sizes: {len(train_dataset)} training examples, {len(eval_dataset)} evaluation examples")
+    print(f"📈 Final processed dataset sizes: {len(train_dataset)} training examples, {len(eval_dataset)} evaluation examples")
     
     return train_dataset, eval_dataset
 
@@ -446,32 +584,31 @@ def train_cover_letter_model(output_dir, optimized=False):
     model.config.use_cache = False
 
     if optimized:
-        # Extremely conservative training configuration to prevent fast overfitting
-        lora_config = get_lora_config(r=32, lora_alpha=64, lora_dropout=0.2)  # Smaller capacity, more regularization
+        lora_config = get_lora_config(r=64, lora_alpha=128, lora_dropout=0.1)  # Higher capacity for better learning
         
         training_args = TrainingArguments(
             output_dir=output_dir,
-            per_device_train_batch_size=1,  # Minimum batch size
-            per_device_eval_batch_size=1,
-            gradient_accumulation_steps=32,  # Very large accumulation for stable gradients
-            learning_rate=5e-6,  # Much slower learning rate 
-            num_train_epochs=25,  # Many more epochs for slow learning
-            logging_steps=5,  # Very frequent logging
+            per_device_train_batch_size=2,  # Slightly larger batch
+            per_device_eval_batch_size=2,
+            gradient_accumulation_steps=16,  # Moderate accumulation
+            learning_rate=2e-5,  # Optimal learning rate for cover letters
+            num_train_epochs=12,  # More epochs for thorough learning
+            logging_steps=5,
             eval_strategy="steps",
-            eval_steps=200,  # Less frequent evaluation to allow more training
+            eval_steps=50,  # More frequent evaluation
             save_strategy="steps",
-            save_steps=400,
-            save_total_limit=5,
+            save_steps=100,
+            save_total_limit=8,
             load_best_model_at_end=True,
             metric_for_best_model="eval_loss",
             greater_is_better=False,
             report_to="none",
             fp16=True,
-            warmup_steps=1000,  # Very long warmup for extremely gradual learning
-            lr_scheduler_type="polynomial",  # Controlled decay
+            warmup_steps=300,  # Proper warmup
+            lr_scheduler_type="cosine",  # Better learning rate schedule
             optim="adamw_torch",
-            weight_decay=0.02,  # More regularization
-            max_grad_norm=0.1,  # Very strict gradient clipping
+            weight_decay=0.01,  # Moderate regularization
+            max_grad_norm=1.0,  # Standard gradient clipping
             seed=42,
             gradient_checkpointing=False,
             label_smoothing_factor=0.0,
@@ -481,35 +618,42 @@ def train_cover_letter_model(output_dir, optimized=False):
             dataloader_num_workers=0,
             save_safetensors=True,
             disable_tqdm=False,
-            # Additional slowdown parameters
-            eval_accumulation_steps=8,  # Slower evaluation
+            eval_accumulation_steps=4,
             save_on_each_node=False,
+            # Advanced optimization settings
+            dataloader_pin_memory=True,
+            group_by_length=True,  # Group similar length sequences
+            logging_first_step=True,
+            log_level="info",
         )
         
         callbacks = [
-            ImprovedTargetLossCallback(target_loss=1.5),  # More conservative target
-            EarlyStoppingCallback(early_stopping_patience=25)  # Much more patience
+            ImprovedTargetLossCallback(target_loss=0.8),  # Much more aggressive target
+            EarlyStoppingCallback(early_stopping_patience=15)  # Reasonable patience
         ]
     else:
-        lora_config = get_lora_config(r=16, lora_alpha=32, lora_dropout=0.15)  # Even smaller for standard mode
+        # Standard optimized configuration
+        lora_config = get_lora_config(r=32, lora_alpha=64, lora_dropout=0.15)
         
         training_args = TrainingArguments(
             output_dir=output_dir,
-            per_device_train_batch_size=2,
-            gradient_accumulation_steps=16,
-            learning_rate=1e-5,  # Slower standard rate
-            num_train_epochs=15,  # More epochs
+            per_device_train_batch_size=4,  # Larger standard batch
+            gradient_accumulation_steps=8,
+            learning_rate=3e-5,  # Good standard rate
+            num_train_epochs=8,
             logging_steps=10,
             eval_strategy="steps",
             eval_steps=100,
             save_strategy="epoch",
             report_to="none",
             fp16=True,
-            warmup_ratio=0.2,  # Longer warmup
+            warmup_ratio=0.15,
             seed=42,
-            weight_decay=0.01
+            weight_decay=0.01,
+            max_grad_norm=1.0,
+            group_by_length=True,
         )
-        callbacks = []
+        callbacks = [ImprovedTargetLossCallback(target_loss=1.2)]
     
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
@@ -528,11 +672,140 @@ def train_cover_letter_model(output_dir, optimized=False):
         callbacks=callbacks,
     )
 
+    print(f"🚀 Starting {'ultra-optimized' if optimized else 'standard'} cover letter model training...")
+    print(f"Training dataset size: {len(train_dataset)}")
+    print(f"Evaluation dataset size: {len(eval_dataset)}")
+    
     trainer.train()
     trainer.save_model(output_dir)
-    print(f"Cover letter model fine-tuning complete. Model saved to {output_dir}")
+    print(f"✅ Cover letter model fine-tuning complete. Model saved to {output_dir}")
 
-# --- Interview Question Model ---
+def train_ultra_optimized_cover_letter_model(output_dir):
+    """Ultra-optimized training specifically designed to achieve very low loss"""
+    set_random_seeds(42)
+    
+    MODEL_ID = "gpt2"
+    CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
+    
+    if "/kaggle/working" in os.getcwd():
+        CACHE_DIR = "/kaggle/working/cache"
+        os.makedirs(CACHE_DIR, exist_ok=True)
+
+    # Get the best possible dataset
+    train_dataset, eval_dataset = prepare_cover_letter_data("ShashiVish/cover-letter-dataset", CACHE_DIR)
+    
+    try:
+        tokenizer = download_with_retry(
+            GPT2Tokenizer.from_pretrained,
+            MODEL_ID,
+            cache_dir=CACHE_DIR
+        )
+    except Exception as e:
+        print(f"Failed to download tokenizer: {e}")
+        tokenizer = GPT2Tokenizer.from_pretrained(MODEL_ID, cache_dir=CACHE_DIR, local_files_only=True)
+    
+    tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "right"
+    
+    try:
+        model = download_with_retry(
+            GPT2LMHeadModel.from_pretrained,
+            MODEL_ID,
+            cache_dir=CACHE_DIR,
+            torch_dtype=torch.float16,
+            device_map="auto"
+        )
+    except Exception as e:
+        print(f"Failed to download model: {e}")
+        model = GPT2LMHeadModel.from_pretrained(
+            MODEL_ID,
+            cache_dir=CACHE_DIR,
+            torch_dtype=torch.float16,
+            device_map="auto",
+            local_files_only=True
+        )
+    
+    model.config.use_cache = False
+
+    lora_config = get_lora_config(r=128, lora_alpha=256, lora_dropout=0.05)
+    
+    training_args = TrainingArguments(
+        output_dir=output_dir,
+        per_device_train_batch_size=1,  # Small batch for precise gradients
+        per_device_eval_batch_size=2,
+        gradient_accumulation_steps=32,  # Large effective batch size
+        learning_rate=1.5e-5,  # Sweet spot for this task
+        num_train_epochs=20,  # Many epochs for thorough learning
+        logging_steps=3,  # Very frequent logging
+        eval_strategy="steps",
+        eval_steps=25,  # Very frequent evaluation
+        save_strategy="steps",
+        save_steps=50,
+        save_total_limit=10,
+        load_best_model_at_end=True,
+        metric_for_best_model="eval_loss",
+        greater_is_better=False,
+        report_to="none",
+        fp16=True,
+        warmup_steps=500,  # Long warmup for stability
+        lr_scheduler_type="cosine_with_restarts",  # Advanced scheduler
+        optim="adamw_torch",
+        weight_decay=0.005,  # Light regularization
+        max_grad_norm=0.5,  # Tight gradient clipping
+        seed=42,
+        gradient_checkpointing=False,
+        label_smoothing_factor=0.0,
+        dataloader_drop_last=True,
+        remove_unused_columns=True,
+        prediction_loss_only=True,
+        dataloader_num_workers=0,
+        save_safetensors=True,
+        disable_tqdm=False,
+        eval_accumulation_steps=2,
+        save_on_each_node=False,
+        # Ultra-optimization settings
+        dataloader_pin_memory=True,
+        group_by_length=True,
+        logging_first_step=True,
+        log_level="info",
+        skip_memory_metrics=False,
+        # Advanced settings for best performance
+        adam_beta1=0.9,
+        adam_beta2=0.999,
+        adam_epsilon=1e-8,
+        lr_scheduler_kwargs={"num_cycles": 2},  # For cosine with restarts
+    )
+    
+    callbacks = [
+        ImprovedTargetLossCallback(target_loss=0.5),  # Extremely low target
+        EarlyStoppingCallback(early_stopping_patience=25)  # More patience for ultra-optimization
+    ]
+    
+    model = get_peft_model(model, lora_config)
+    model.print_trainable_parameters()
+    
+    model.train()
+    
+    trainer = SFTTrainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        tokenizer=tokenizer,
+        dataset_text_field="text",
+        max_seq_length=512,
+        packing=False,
+        callbacks=callbacks,
+    )
+
+    print(f"Training examples: {len(train_dataset)}")
+    print(f"Evaluation examples: {len(eval_dataset)}")
+    
+    trainer.train()
+    trainer.save_model(output_dir)
+    print(f"Cover letter model trained. Model saved to {output_dir}")
+
+# Interview Question Model 
 
 def prepare_interview_data_comprehensive(dataset_name):
     """Generate comprehensive interview data with much more variety"""
@@ -889,7 +1162,7 @@ def main():
         return
     
     parser = argparse.ArgumentParser(description="Fine-tune a model for a specific task.")
-    parser.add_argument("--model_type", type=str, required=True, choices=["cover_letter", "interview", "interview_focused"])
+    parser.add_argument("--model_type", type=str, required=True, choices=["cover_letter", "cover_letter_ultra", "interview", "interview_focused"])
     parser.add_argument("--output_dir", type=str, required=True)
     parser.add_argument("--hf_token", type=str, help="Hugging Face token")
     parser.add_argument("--optimized", action="store_true", help="Optimized mode for better performance")
@@ -913,6 +1186,8 @@ def main():
     if args.model_type == "cover_letter":
         print("--- Starting Cover Letter Model Fine-Tuning ---")
         train_cover_letter_model(args.output_dir, optimized=args.optimized)
+    elif args.model_type == "cover_letter_ultra":
+        train_ultra_optimized_cover_letter_model(args.output_dir)
     elif args.model_type == "interview":
         print("--- Starting Interview Model Fine-Tuning ---")
         train_interview_model_focused(args.output_dir, optimized=args.optimized)
