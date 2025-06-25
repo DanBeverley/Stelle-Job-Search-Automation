@@ -5,6 +5,15 @@ import warnings
 import random
 import numpy as np
 import time
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler()]
+)
+logger = logging.getLogger(__name__)
 
 # Handle potential import issues with graceful fallbacks
 try:
@@ -25,9 +34,10 @@ try:
     from huggingface_hub import login
     import requests
     IMPORTS_SUCCESSFUL = True
+    logger.info("All required dependencies imported successfully")
 except ImportError as e:
-    print(f"Import error: {e}")
-    print("Some dependencies may be incompatible. Please check your environment.")
+    logger.error(f"Import error: {e}")
+    logger.error("Some dependencies may be incompatible. Please check your environment")
     IMPORTS_SUCCESSFUL = False
 
 # Suppress specific deprecation warnings from TRL
@@ -42,6 +52,7 @@ def set_random_seeds(seed=42):
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+    logger.info(f"Random seeds set to {seed} for reproducibility")
 
 # --- Utility Functions ---
 
@@ -61,13 +72,13 @@ def download_with_retry(download_func, *args, max_retries=3, **kwargs):
             return download_func(*args, **kwargs)
         except Exception as e:
             if "timeout" in str(e).lower() or "timed out" in str(e).lower():
-                print(f"Timeout on attempt {attempt + 1}/{max_retries}: {e}")
+                logger.warning(f"Timeout on attempt {attempt + 1}/{max_retries}: {e}")
                 if attempt < max_retries - 1:
                     wait_time = (attempt + 1) * 10
-                    print(f"Waiting {wait_time} seconds before retry...")
+                    logger.info(f"Waiting {wait_time} seconds before retry")
                     time.sleep(wait_time)
                 else:
-                    print("Max retries reached. Using offline mode if available.")
+                    logger.warning("Max retries reached. Attempting offline mode if available")
                     if 'local_files_only' in kwargs:
                         kwargs['local_files_only'] = True
                         try:
@@ -253,7 +264,7 @@ def create_synthetic_cover_letters(n_samples=500):
             "Cover Letter": cover_letter
         })
     
-    print(f"Created {len(data)} synthetic cover letter examples")
+    logger.info(f"Created {len(data)} synthetic cover letter examples")
     return Dataset.from_list(data)
 
 def load_dataset_with_retry(dataset_name, max_retries=3, timeout_seconds=60):
@@ -263,7 +274,7 @@ def load_dataset_with_retry(dataset_name, max_retries=3, timeout_seconds=60):
     
     for attempt in range(max_retries):
         try:
-            print(f"Attempting to load dataset '{dataset_name}' (attempt {attempt + 1}/{max_retries})")
+            logger.info(f"Attempting to load dataset '{dataset_name}' (attempt {attempt + 1}/{max_retries})")
             
             # Set environment variable for timeout instead
             os.environ['HF_HUB_DOWNLOAD_TIMEOUT'] = str(timeout_seconds)
@@ -292,45 +303,45 @@ def load_dataset_with_retry(dataset_name, max_retries=3, timeout_seconds=60):
                         dataset = Dataset.from_generator(lambda: dataset)
                     
                     if len(dataset) > 0:
-                        print(f"✅ Successfully loaded dataset '{dataset_name}' with {len(dataset)} examples")
+                        logger.info(f"Successfully loaded dataset '{dataset_name}' with {len(dataset)} examples")
                         return dataset
                     else:
-                        print(f"⚠️ Dataset loaded but empty, trying next approach...")
+                        logger.warning(f"Dataset loaded but empty, trying next approach")
                         continue
                         
                 except Exception as split_error:
-                    print(f"⚠️ Failed with split '{split_name}': {split_error}")
+                    logger.warning(f"Failed with split '{split_name}': {split_error}")
                     continue
             
         except Exception as e:
             error_msg = str(e).lower()
-            print(f"❌ Attempt {attempt + 1} failed: {e}")
+            logger.error(f"Attempt {attempt + 1} failed: {e}")
             
             # Check if it's a network/timeout issue
             if any(keyword in error_msg for keyword in ['timeout', 'connection', 'network', 'unreachable']):
                 if attempt < max_retries - 1:
                     wait_time = (2 ** attempt) * 30  # Exponential backoff: 30s, 60s, 120s
-                    print(f"⏳ Network issue detected. Waiting {wait_time}s before next attempt...")
+                    logger.info(f"Network issue detected. Waiting {wait_time}s before next attempt")
                     time.sleep(wait_time)
                     continue
             
             # For other errors, try offline mode if available
             if attempt == max_retries - 1:
                 try:
-                    print("🔄 Trying offline mode as final attempt...")
+                    logger.info("Trying offline mode as final attempt")
                     dataset = load_dataset(dataset_name, split="train", local_files_only=True)
                     if len(dataset) > 0:
-                        print(f"✅ Loaded from cache: {len(dataset)} examples")
+                        logger.info(f"Loaded from cache: {len(dataset)} examples")
                         return dataset
                 except:
                     pass
             
             if attempt < max_retries - 1:
                 wait_time = 15 * (attempt + 1)
-                print(f"⏳ Waiting {wait_time}s before next attempt...")
+                logger.info(f"Waiting {wait_time}s before next attempt")
                 time.sleep(wait_time)
             else:
-                print(f"💡 All {max_retries} attempts failed. Will use synthetic data instead.")
+                logger.warning(f"All {max_retries} attempts failed. Will use synthetic data instead")
                 raise e
 
 def load_real_cover_letter_data_alternative():
@@ -344,7 +355,7 @@ def load_real_cover_letter_data_alternative():
     
     for dataset_name in alternative_datasets:
         try:
-            print(f"🔍 Trying alternative dataset: {dataset_name}")
+            logger.info(f"Trying alternative dataset: {dataset_name}")
             dataset = load_dataset_with_retry(dataset_name, max_retries=2, timeout_seconds=120)
             
             # Check if dataset has reasonable structure
@@ -357,12 +368,12 @@ def load_real_cover_letter_data_alternative():
                         relevant_cols.append(col)
                 
                 if relevant_cols:
-                    print(f"✅ Found viable dataset: {dataset_name} with {len(dataset)} examples")
-                    print(f"Relevant columns: {relevant_cols}")
+                    logger.info(f"Found viable dataset: {dataset_name} with {len(dataset)} examples")
+                    logger.info(f"Relevant columns: {relevant_cols}")
                     return dataset, dataset_name
                     
         except Exception as e:
-            print(f"❌ Failed to load {dataset_name}: {e}")
+            logger.error(f"Failed to load {dataset_name}: {e}")
             continue
     
     return None, None
@@ -376,17 +387,17 @@ def prepare_cover_letter_data(dataset_name, cache_dir):
     try:
         # Use improved dataset loading with retry
         dataset = load_dataset_with_retry(dataset_name, max_retries=3, timeout_seconds=120)
-        print(f"✅ Successfully loaded primary dataset: {dataset_name}")
+        logger.info(f"Successfully loaded primary dataset: {dataset_name}")
         
     except Exception as e:
-        print(f"❌ Failed to load primary dataset: {e}")
+        logger.error(f"Failed to load primary dataset: {e}")
         
         # Try alternative datasets
-        print("🔍 Searching for alternative datasets...")
+        logger.info("Searching for alternative datasets")
         dataset, actual_dataset_name = load_real_cover_letter_data_alternative()
         
         if dataset is None:
-            print("❌ All real datasets failed. Using synthetic data...")
+            logger.warning("All real datasets failed. Using synthetic data")
             use_synthetic = True
     
     if use_synthetic:
@@ -396,10 +407,10 @@ def prepare_cover_letter_data(dataset_name, cache_dir):
         train_dataset = split_dataset['train']
         eval_dataset = split_dataset['test']
         
-        print(f"🔧 Using enhanced synthetic dataset: {len(train_dataset)} train, {len(eval_dataset)} eval examples")
+        logger.info(f"Using enhanced synthetic dataset: {len(train_dataset)} train, {len(eval_dataset)} eval examples")
     else:
         # Process real dataset
-        print(f"📊 Processing real dataset: {actual_dataset_name}")
+        logger.info(f"Processing real dataset: {actual_dataset_name}")
         
         # Shuffle and split the real dataset
         dataset = dataset.shuffle(seed=42)
@@ -419,7 +430,7 @@ def prepare_cover_letter_data(dataset_name, cache_dir):
             train_dataset = dataset.select(range(total_size - split_point))
             eval_dataset = dataset.select(range(total_size - split_point, total_size))
         
-        print(f"✅ Using real dataset: {len(train_dataset)} train, {len(eval_dataset)} eval examples")
+        logger.info(f"Using real dataset: {len(train_dataset)} train, {len(eval_dataset)} eval examples")
     
     # Improved data processing function
     def process_example_advanced(example):
@@ -484,7 +495,7 @@ Sincerely,
     train_dataset = train_dataset.filter(lambda x: len(x['text']) > 150)
     eval_dataset = eval_dataset.filter(lambda x: len(x['text']) > 150)
     
-    print(f"📈 Final processed dataset sizes: {len(train_dataset)} training examples, {len(eval_dataset)} evaluation examples")
+    logger.info(f"Final processed dataset sizes: {len(train_dataset)} training examples, {len(eval_dataset)} evaluation examples")
     
     return train_dataset, eval_dataset
 
@@ -519,21 +530,21 @@ class ImprovedTargetLossCallback(TrainerCallback):
             
         current_eval_loss = logs.get('eval_loss', float('inf'))
         
-        print(f"Current eval loss: {current_eval_loss:.4f} | Target: <{self.target_loss}")
+        logger.info(f"Current eval loss: {current_eval_loss:.4f} | Target: <{self.target_loss}")
         
         if current_eval_loss < self.target_loss:
-            print(f"Target achieved! Loss {current_eval_loss:.4f} < {self.target_loss}")
+            logger.info(f"Target achieved! Loss {current_eval_loss:.4f} < {self.target_loss}")
             control.should_training_stop = True
             return
             
         if current_eval_loss < self.best_eval_loss:
             self.best_eval_loss = current_eval_loss
             self.patience_counter = 0
-            print(f"New best: {current_eval_loss:.4f}")
+            logger.info(f"New best: {current_eval_loss:.4f}")
         else:
             self.patience_counter += 1
             if self.patience_counter >= self.max_patience:
-                print("Early stopping: No improvement")
+                logger.info("Early stopping: No improvement")
                 control.should_training_stop = True
 
 def train_cover_letter_model(output_dir, optimized=False):
@@ -672,13 +683,13 @@ def train_cover_letter_model(output_dir, optimized=False):
         callbacks=callbacks,
     )
 
-    print(f"🚀 Starting {'ultra-optimized' if optimized else 'standard'} cover letter model training...")
-    print(f"Training dataset size: {len(train_dataset)}")
-    print(f"Evaluation dataset size: {len(eval_dataset)}")
+    logger.info(f"Starting {'ultra-optimized' if optimized else 'standard'} cover letter model training")
+    logger.info(f"Training dataset size: {len(train_dataset)}")
+    logger.info(f"Evaluation dataset size: {len(eval_dataset)}")
     
     trainer.train()
     trainer.save_model(output_dir)
-    print(f"✅ Cover letter model fine-tuning complete. Model saved to {output_dir}")
+    logger.info(f"Cover letter model fine-tuning complete. Model saved to {output_dir}")
 
 def train_ultra_optimized_cover_letter_model(output_dir):
     """Ultra-optimized training specifically designed to achieve very low loss"""
@@ -798,12 +809,12 @@ def train_ultra_optimized_cover_letter_model(output_dir):
         callbacks=callbacks,
     )
 
-    print(f"Training examples: {len(train_dataset)}")
-    print(f"Evaluation examples: {len(eval_dataset)}")
+    logger.info(f"Training examples: {len(train_dataset)}")
+    logger.info(f"Evaluation examples: {len(eval_dataset)}")
     
     trainer.train()
     trainer.save_model(output_dir)
-    print(f"Cover letter model trained. Model saved to {output_dir}")
+    logger.info(f"Cover letter model trained. Model saved to {output_dir}")
 
 # Interview Question Model 
 
@@ -1006,7 +1017,7 @@ def prepare_interview_data_comprehensive(dataset_name):
                 "text": f"### Human: {q}\n\n### Assistant: {a}\n\n### End"
             })
     
-    print(f"Generated {len(synthetic_data)} comprehensive interview examples")
+    logger.info(f"Generated {len(synthetic_data)} comprehensive interview examples")
     
     random.shuffle(synthetic_data)
     
@@ -1147,18 +1158,18 @@ def train_interview_model_focused(output_dir, optimized=False):
         callbacks=callbacks,
     )
     
-    print(f"Starting comprehensive interview model training with {len(train_dataset)} examples...")
-    print("This will take longer but should achieve better results...")
+    logger.info(f"Starting comprehensive interview model training with {len(train_dataset)} examples")
+    logger.info("This will take longer but should achieve better results")
     
     trainer.train()
     trainer.save_model(output_dir)
-    print(f"Interview model fine-tuning complete. Model saved to {output_dir}")
+    logger.info(f"Interview model fine-tuning complete. Model saved to {output_dir}")
 
 # --- Main Execution ---
 
 def main():
     if not IMPORTS_SUCCESSFUL:
-        print("ERROR: Required dependencies could not be imported.")
+        logger.error("Required dependencies could not be imported")
         return
     
     parser = argparse.ArgumentParser(description="Fine-tune a model for a specific task.")
@@ -1171,28 +1182,31 @@ def main():
     hf_token = args.hf_token or os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN") or os.getenv("HF_API_TOKEN")
     
     if hf_token:
-        print("Logging in to Hugging Face Hub...")
+        logger.info("Logging in to Hugging Face Hub")
         try:
             login(token=hf_token)
-            print("Successfully authenticated with Hugging Face!")
+            logger.info("Successfully authenticated with Hugging Face")
         except Exception as e:
-            print(f"Failed to authenticate: {e}")
+            logger.error(f"Failed to authenticate: {e}")
 
-    if args.optimized:
-        print("Optimized mode: Enhanced training for better performance")
+    if args.model_type == "cover_letter_ultra":
+        logger.info("ULTRA-OPTIMIZED mode: Maximum performance training for lowest loss")
+    elif args.optimized:
+        logger.info("Optimized mode: Enhanced training for better performance")
     else:
-        print("Standard mode: Quick training")
+        logger.info("Standard mode: Quick training")
 
     if args.model_type == "cover_letter":
-        print("--- Starting Cover Letter Model Fine-Tuning ---")
+        logger.info("Starting Cover Letter Model Fine-Tuning")
         train_cover_letter_model(args.output_dir, optimized=args.optimized)
     elif args.model_type == "cover_letter_ultra":
+        logger.info("Starting ULTRA-OPTIMIZED Cover Letter Model Fine-Tuning")
         train_ultra_optimized_cover_letter_model(args.output_dir)
     elif args.model_type == "interview":
-        print("--- Starting Interview Model Fine-Tuning ---")
+        logger.info("Starting Interview Model Fine-Tuning")
         train_interview_model_focused(args.output_dir, optimized=args.optimized)
     elif args.model_type == "interview_focused":
-        print("--- Starting Focused Interview Model Fine-Tuning ---")
+        logger.info("Starting Focused Interview Model Fine-Tuning")
         train_interview_model_focused(args.output_dir, optimized=args.optimized)
 
 if __name__ == "__main__":
