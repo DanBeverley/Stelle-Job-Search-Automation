@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from ..api.auth import get_current_active_user
 from .. import schemas
 from ..models.db.database import get_db
-from ..models.db import user as user_model
 from ..services import interview_prep_service
+from ..utils.api_helpers import get_user_with_cv_data, validate_non_empty_string
 
 router = APIRouter()
 
@@ -18,12 +18,8 @@ def get_interview_questions(
     Takes a job description and the user's CV data from the database,
     and returns a list of tailored mock interview questions.
     """
-    if not request.job_description:
-        raise HTTPException(status_code=400, detail="Job description cannot be empty.")
-    
-    db_user = db.query(user_model.User).filter(user_model.User.id == current_user.id).first()
-    if not db_user or not db_user.parsed_cv_data:
-        raise HTTPException(status_code=404, detail="CV data not found for the user. Please upload a CV first.")
+    validate_non_empty_string(request.job_description, "Job description")
+    db_user = get_user_with_cv_data(db, current_user, require_cv=True)
 
     questions = interview_prep_service.generate_questions_from_cv(
         cv_data=db_user.parsed_cv_data, 
@@ -44,8 +40,7 @@ def analyze_user_answer(
     Analyzes a user's answer to an interview question using the STAR method
     and provides feedback.
     """
-    if not request.answer:
-        raise HTTPException(status_code=400, detail="Answer cannot be empty.")
+    validate_non_empty_string(request.answer, "Answer")
         
     feedback = interview_prep_service.analyze_answer_with_star(request.answer)
     
