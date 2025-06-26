@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from typing import Optional, List
+import logging
 
 from .. import schemas
 from ..models.db.database import get_db
@@ -8,6 +9,8 @@ from ..models.db import user as user_model
 from ..api.auth import get_current_active_user
 from ..utils.geolocation import get_location_from_ip
 from ..services.job_search_providers import adzuna_api, theirstack_api
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -26,32 +29,35 @@ def search_jobs(
     - If the user has no saved location, it uses IP-based geolocation.
     - The results from all job providers are aggregated.
     """
-    print("[DEBUG] Entered search_jobs endpoint.")
+    logger.info("Starting job search for user: %s", current_user.email)
     final_location = location
     db_user = db.query(user_model.User).filter(user_model.User.id == current_user.id).first()
-    print(f"[DEBUG] Current user: {current_user.email}, DB user found: {'Yes' if db_user else 'No'}")
+    logger.debug("Current user: %s, DB user found: %s", current_user.email, bool(db_user))
 
     # 1. Determine the location
-    print("[DEBUG] Determining location...")
+    logger.debug("Determining location for job search")
     if not final_location:
         if db_user and db_user.city and db_user.country:
             final_location = f"{db_user.city}, {db_user.country}"
+            logger.debug("Using saved user location: %s", final_location)
         else:
             # Fallback to IP geolocation
             client_ip = request.client.host
-            print(f"[DEBUG] No location provided, using IP geolocation for IP: {client_ip}")
+            logger.debug("No location provided, using IP geolocation for IP: %s", client_ip)
             geo_location = get_location_from_ip(client_ip)
             if geo_location and geo_location.get("city"):
                 final_location = f"{geo_location['city']}, {geo_location['country']}"
+                logger.info("Location detected from IP: %s", final_location)
                 # 2. Update user profile with the new location
                 if db_user:
                     db_user.city = geo_location['city']
                     db_user.country = geo_location['country']
                     db.commit()
-    print(f"[DEBUG] Final location determined: {final_location}")
+                    logger.debug("Updated user location in database")
+    logger.info("Final location determined: %s", final_location)
 
     if not final_location:
-        print("[DEBUG] Location could not be determined. Raising HTTPException.")
+        logger.warning("Location could not be determined for user: %s", current_user.email)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Could not determine location. Please provide one manually.",
@@ -59,29 +65,29 @@ def search_jobs(
 
     # 3. Call job provider services
     try:
-        print("[DEBUG] Calling Adzuna API...")
+        logger.debug("Calling Adzuna API for keyword: %s, location: %s", keyword, final_location)
         adzuna_jobs_raw = adzuna_api.search_adzuna_jobs(keyword, final_location)
-        print("[DEBUG] Adzuna API call successful.")
+        logger.info("Adzuna API returned %d jobs", len(adzuna_jobs_raw))
     except Exception as e:
-        print(f"[DEBUG] Adzuna API call failed: {e}")
+        logger.error("Adzuna API call failed: %s", str(e))
         raise HTTPException(status_code=500, detail=f"Adzuna API Error: {e}")
 
     try:
-        print("[DEBUG] Calling TheirStack API...")
+        logger.debug("Calling TheirStack API for keyword: %s, location: %s", keyword, final_location)
         theirstack_jobs_raw = theirstack_api.search_theirstack_jobs(keyword, final_location)
-        print("[DEBUG] TheirStack API call successful.")
+        logger.info("TheirStack API returned %d jobs", len(theirstack_jobs_raw))
     except Exception as e:
-        print(f"[DEBUG] TheirStack API call failed: {e}")
+        logger.error("TheirStack API call failed: %s", str(e))
         raise HTTPException(status_code=500, detail=f"TheirStack API Error: {e}")
 
     # 4. Aggregate and format results
-    print("[DEBUG] Aggregating and formatting results...")
+    logger.debug("Aggregating and formatting job results")
     all_jobs: List[schemas.JobListing] = []
 
     # This is where normalize the raw data from each API
     # into the standard `JobListing` schema.
     all_jobs.extend([schemas.JobListing(**job) for job in adzuna_jobs_raw])
     all_jobs.extend([schemas.JobListing(**job) for job in theirstack_jobs_raw])
-    print("[DEBUG] Formatting complete. Returning results.")
+    logger.info("Job search completed. Returning %d total jobs", len(all_jobs))
     
     return {"jobs": all_jobs} 

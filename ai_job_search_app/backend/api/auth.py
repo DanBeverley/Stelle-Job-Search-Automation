@@ -14,15 +14,9 @@ from ..security import (
 )
 from ..models.db.database import get_db
 
-# Will create these files later
-# import models
-# import schemas
-# import security
 
 router = APIRouter()
 
-# --- TEMPORARY HARDCODED SECRET FOR DEBUGGING ---
-# ------------------------------------------------
 
 # This is the correct scheme for a simple "Bearer" token in the header.
 oauth2_scheme = HTTPBearer(scheme_name="Bearer")

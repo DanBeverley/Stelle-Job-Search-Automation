@@ -6,12 +6,18 @@ from cachetools import cached, TTLCache
 from difflib import SequenceMatcher
 import spacy
 from collections import Counter
+import logging
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Load spaCy model for advanced NLP
 try:
     nlp = spacy.load("en_core_web_sm")
+    logger.info("Successfully loaded spaCy model 'en_core_web_sm'")
 except IOError:
     nlp = None
+    logger.warning("spaCy model 'en_core_web_sm' not found. NLP-based skill extraction will be limited")
 
 # --- edX API Configuration ---
 EDX_API_CLIENT_ID = os.environ.get("EDX_API_CLIENT_ID")
@@ -69,6 +75,7 @@ class SkillAnalyzer:
     def __init__(self):
         self.skill_synonyms = self._load_skill_synonyms()
         self.skill_patterns = self._compile_skill_patterns()
+        logger.debug("SkillAnalyzer initialized with skill patterns and synonyms")
     
     def _load_skill_synonyms(self) -> Dict[str, List[str]]:
         """Load skill synonyms for better matching"""
@@ -169,6 +176,7 @@ class SkillAnalyzer:
                 normalized = self.normalize_skill(match)
                 skills.add(normalized)
         
+        logger.debug(f"Extracted {len(skills)} skills from text")
         return skills
     
     def categorize_skills(self, skills: List[str]) -> Dict[str, List[str]]:
@@ -280,10 +288,11 @@ def get_course_recommendations(skill: str, max_courses: int = 3) -> List[Dict[st
             if len(all_courses) >= max_courses:
                 break
         
+        logger.debug(f"Found {len(all_courses)} course recommendations for skill: {skill}")
         return all_courses[:max_courses]
         
     except requests.exceptions.RequestException as e:
-        print(f"Error fetching courses for '{skill}': {e}")
+        logger.error(f"Error fetching courses for '{skill}': {e}")
         # Return fallback recommendations
         return [{
             "title": f"Learn {skill.title()}",
@@ -294,13 +303,15 @@ def get_course_recommendations(skill: str, max_courses: int = 3) -> List[Dict[st
             "skill": skill
         }]
     except Exception as e:
-        print(f"Unexpected error fetching courses for '{skill}': {e}")
+        logger.error(f"Unexpected error fetching courses for '{skill}': {e}")
         return []
 
 def analyze_skill_gap(job_description: str, user_skills: List[str]) -> Dict[str, Any]:
     """
     Analyzes the gap between user skills and job requirements with advanced matching and recommendations.
     """
+    logger.info(f"Analyzing skill gap for {len(user_skills)} user skills against job requirements")
+    
     # Extract skills from job description
     required_skills = list(skill_analyzer.extract_skills_from_text(job_description))
     
@@ -334,6 +345,8 @@ def analyze_skill_gap(job_description: str, user_skills: List[str]) -> Dict[str,
     for skill in prioritized_missing[:5]:  # Limit to top 5 missing skills
         courses = get_course_recommendations(skill, max_courses=2)
         recommended_courses.extend(courses)
+    
+    logger.info(f"Skill analysis complete: {len(matched_skills)}/{len(required_skills)} skills matched ({match_score*100:.1f}%)")
     
     return {
         "matched_skills": matched_skills,

@@ -1,12 +1,12 @@
 import json
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from .. import schemas
 from ..models.db.database import get_db
-from ..models.db import user as user_model
 from ..utils.encryption import encrypt_data
 from .auth import get_current_active_user
+from ..utils.api_helpers import get_user_with_cv_data
 
 router = APIRouter(
     tags=["resume"],
@@ -25,9 +25,7 @@ def save_resume(
     The incoming resume data (JSON) is converted to a string, encrypted,
     and then stored in the database.
     """
-    db_user = db.query(user_model.User).filter(user_model.User.id == current_user.id).first()
-    if not db_user:
-        raise HTTPException(status_code=404, detail="User not found")
+    db_user = get_user_with_cv_data(db, current_user, require_cv=False)
 
     # Convert dict to JSON string before encrypting
     resume_json_string = json.dumps(resume_data.content)

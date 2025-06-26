@@ -1,19 +1,20 @@
-import os
 import requests
+import logging
 from typing import List, Dict, Any
-from dotenv import load_dotenv
+from ...config.settings import get_settings
 
-load_dotenv()
+logger = logging.getLogger(__name__)
+settings = get_settings()
 
-THEIRSTACK_API_KEY = os.getenv("THEIRSTACK_API_KEY")
-THEIRSTACK_API_URL = "https://api.theirstack.com/v1/jobs/search"
+THEIRSTACK_API_KEY = settings.theirstack_api_key
+THEIRSTACK_API_URL = settings.theirstack_api_url
 
 def search_theirstack_jobs(keyword: str, location: str) -> List[Dict[str, Any]]:
     """
     Searches for jobs using the TheirStack API and returns them in a standardized format.
     """
     if not THEIRSTACK_API_KEY:
-        print("Warning: TheirStack API key not set. Skipping search.")
+        logger.warning("TheirStack API key not set. Skipping search.")
         return []
 
     headers = {
@@ -47,5 +48,5 @@ def search_theirstack_jobs(keyword: str, location: str) -> List[Dict[str, Any]]:
         return standardized_jobs
 
     except requests.exceptions.RequestException as e:
-        print(f"TheirStack API request failed: {e}")
+        logger.error("TheirStack API request failed: %s", str(e))
         return [] 

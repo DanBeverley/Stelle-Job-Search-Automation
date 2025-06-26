@@ -14,12 +14,21 @@ import argparse
 import re
 import time
 import requests
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler()]
+)
+logger = logging.getLogger(__name__)
 
 def load_dataset_with_retry(dataset_name, max_retries=3, timeout=60, **kwargs):
     """Load dataset with retry logic and longer timeout"""
     for attempt in range(max_retries):
         try:
-            print(f"Attempt {attempt + 1}/{max_retries} to load {dataset_name}")
+            logger.info(f"Attempt {attempt + 1}/{max_retries} to load {dataset_name}")
             
             download_config = DownloadConfig(
                 max_retries=3,
@@ -36,17 +45,17 @@ def load_dataset_with_retry(dataset_name, max_retries=3, timeout=60, **kwargs):
             return dataset
             
         except Exception as e:
-            print(f"Attempt {attempt + 1} failed: {e}")
+            logger.error(f"Attempt {attempt + 1} failed: {e}")
             if attempt < max_retries - 1:
                 wait_time = (attempt + 1) * 10
-                print(f"Waiting {wait_time} seconds before retry...")
+                logger.info(f"Waiting {wait_time} seconds before retry")
                 time.sleep(wait_time)
             else:
                 raise e
 
 def create_synthetic_data():
     """Create synthetic salary data as fallback"""
-    print("Creating synthetic salary data as fallback...")
+    logger.info("Creating synthetic salary data as fallback")
     
     np.random.seed(42)
     n_samples = 5000
@@ -100,12 +109,13 @@ def create_synthetic_data():
             'max_salary': max_salary
         })
     
+    logger.info(f"Generated {len(data)} synthetic salary records")
     return pd.DataFrame(data)
 
 def normalize_linkedin_data():
     """Loads and normalizes the LinkedIn dataset."""
     try:
-        print("Loading dataset 1: xanderios/linkedin-job-postings")
+        logger.info("Loading dataset 1: xanderios/linkedin-job-postings")
         dataset = load_dataset_with_retry(
             "xanderios/linkedin-job-postings", 
             data_files="job_postings.csv", 
@@ -128,19 +138,20 @@ def normalize_linkedin_data():
         df.dropna(subset=['yearly_salary'], inplace=True)
         df['min_salary'] = df['yearly_salary'] * 0.85
         df['max_salary'] = df['yearly_salary'] * 1.15
+        logger.info(f"Successfully processed LinkedIn dataset with {len(df)} records")
         return df[['title', 'location', 'description', 'min_salary', 'max_salary']]
     except Exception as e:
-        print(f"Could not process LinkedIn dataset. Error: {e}")
+        logger.error(f"Could not process LinkedIn dataset: {e}")
         return pd.DataFrame()
 
 def normalize_classification_data():
     """Loads and normalizes the job posting classification dataset."""
     try:
-        print("Loading dataset 2: will4381/job-posting-classification")
+        logger.info("Loading dataset 2: will4381/job-posting-classification")
         dataset = load_dataset_with_retry("will4381/job-posting-classification", split="train")
         df = pd.DataFrame(dataset)
         
-        print(f"Available columns: {df.columns.tolist()}")
+        logger.debug(f"Available columns: {df.columns.tolist()}")
         
         column_mapping = {}
         
@@ -168,8 +179,8 @@ def normalize_classification_data():
         missing_cols = [col for col in required_cols if col not in column_mapping]
         
         if missing_cols:
-            print(f"Missing required columns: {missing_cols}")
-            print(f"Available columns: {df.columns.tolist()}")
+            logger.warning(f"Missing required columns: {missing_cols}")
+            logger.warning(f"Available columns: {df.columns.tolist()}")
             return pd.DataFrame()
         
         if 'job_position' in df.columns:
@@ -206,21 +217,24 @@ def normalize_classification_data():
         df.rename(columns=rename_mapping, inplace=True)
         
         if 'location' in df.columns:
-            return df[['title', 'location', 'description', 'min_salary', 'max_salary']]
+            result_df = df[['title', 'location', 'description', 'min_salary', 'max_salary']]
         else:
             df['location'] = 'Unknown'
-        return df[['title', 'location', 'description', 'min_salary', 'max_salary']]
+            result_df = df[['title', 'location', 'description', 'min_salary', 'max_salary']]
+        
+        logger.info(f"Successfully processed classification dataset with {len(result_df)} records")
+        return result_df
     except Exception as e:
-        print(f"Could not process classification dataset. Error: {e}")
+        logger.error(f"Could not process classification dataset: {e}")
         return pd.DataFrame()
 
 def normalize_azrai_data():
     """Loads, normalizes, and converts currency for the Azrai dataset."""
     try:
-        print("Loading dataset 3: azrai99/job-dataset")
+        logger.info("Loading dataset 3: azrai99/job-dataset")
         dataset = load_dataset_with_retry("azrai99/job-dataset", split="train")
         df = pd.DataFrame(dataset)
-        print(f"Azrai dataset columns: {df.columns.tolist()}")
+        logger.debug(f"Azrai dataset columns: {df.columns.tolist()}")
         
         column_mapping = {}
         for col in df.columns:
@@ -237,7 +251,7 @@ def normalize_azrai_data():
         missing_cols = [col for col in required_cols if col not in column_mapping]
         
         if missing_cols:
-            print(f"Azrai dataset missing columns: {missing_cols}")
+            logger.warning(f"Azrai dataset missing columns: {missing_cols}")
             return pd.DataFrame()
         
         cols_to_extract = [column_mapping[col] for col in required_cols]
@@ -286,12 +300,15 @@ def normalize_azrai_data():
         df.rename(columns=rename_mapping, inplace=True)
         
         if 'location' in df.columns:
-            return df[['title', 'location', 'description', 'min_salary', 'max_salary']]
+            result_df = df[['title', 'location', 'description', 'min_salary', 'max_salary']]
         else:
             df['location'] = 'Unknown'
-        return df[['title', 'location', 'description', 'min_salary', 'max_salary']]
+            result_df = df[['title', 'location', 'description', 'min_salary', 'max_salary']]
+        
+        logger.info(f"Successfully processed Azrai dataset with {len(result_df)} records")
+        return result_df
     except Exception as e:
-        print(f"Could not process Azrai dataset. Error: {e}")
+        logger.error(f"Could not process Azrai dataset: {e}")
         return pd.DataFrame()
 
 def main():
@@ -299,10 +316,13 @@ def main():
     parser.add_argument("--output_dir", type=str, required=True, help="Directory to save the model artifacts.")
     args = parser.parse_args()
 
+    logger.info("Starting salary model training pipeline")
+    
     os.makedirs(args.output_dir, exist_ok=True)
     MODEL_FILE = os.path.join(args.output_dir, "salary_predictor_xgboost.json")
     PREPROCESSOR_FILE = os.path.join(args.output_dir, "salary_predictor_preprocessor.joblib")
 
+    logger.info("Loading and processing datasets")
     df1 = normalize_linkedin_data()
     df2 = normalize_classification_data()
     df3 = normalize_azrai_data()
@@ -310,19 +330,19 @@ def main():
     combined_df = pd.concat([df1, df2, df3], ignore_index=True)
     
     if combined_df.empty:
-        print("\nAll external datasets failed to load. Using synthetic data instead...")
+        logger.warning("All external datasets failed to load. Using synthetic data instead")
         combined_df = create_synthetic_data()
     
-    print(f"\n--- Combined dataset has {len(combined_df)} records after normalization. ---")
+    logger.info(f"Combined dataset has {len(combined_df)} records after normalization")
 
-    print("Preparing final features for training...")
+    logger.info("Preparing final features for training")
     combined_df.dropna(inplace=True)
     combined_df['Salary.Avg'] = (combined_df['min_salary'] + combined_df['max_salary']) / 2
 
     q_low = combined_df['Salary.Avg'].quantile(0.01)
     q_hi  = combined_df['Salary.Avg'].quantile(0.99)
     combined_df = combined_df[(combined_df['Salary.Avg'] > q_low) & (combined_df['Salary.Avg'] < q_hi)]
-    print(f"Dataset has {len(combined_df)} records after removing outliers.")
+    logger.info(f"Dataset has {len(combined_df)} records after removing outliers")
 
     combined_df['title'] = combined_df['title'].fillna('Unknown').astype(str)
     combined_df['location'] = combined_df['location'].fillna('Unknown').astype(str)
@@ -357,17 +377,17 @@ def main():
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     
-    print("\n--- Training XGBoost model... ---")
+    logger.info("Training XGBoost model")
     model_pipeline.fit(X_train, y_train)
     
     y_pred = model_pipeline.predict(X_test)
     rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-    print(f"--- Model training complete. RMSE on test data: ${rmse:,.2f} ---")
+    logger.info(f"Model training complete. RMSE on test data: ${rmse:,.2f}")
 
-    print(f"\nSaving model and preprocessor to {args.output_dir}")
+    logger.info(f"Saving model and preprocessor to {args.output_dir}")
     model_pipeline.named_steps['regressor'].save_model(MODEL_FILE)
     joblib.dump(model_pipeline.named_steps['preprocessor'], PREPROCESSOR_FILE)
-    print("--- Artifacts saved successfully. ---")
+    logger.info("Model artifacts saved successfully")
 
 if __name__ == "__main__":
     main() 

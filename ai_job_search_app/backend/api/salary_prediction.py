@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Body, status
+from fastapi import APIRouter, Depends, Body
 from .. import schemas
 from ..services import salary_prediction_service
 from .auth import get_current_active_user
-from ..models.db import user as user_model
-from sqlalchemy.orm import Session
 from ..models.db.database import get_db
+from ..utils.api_helpers import get_user_with_cv_data, handle_service_error
+from sqlalchemy.orm import Session
 
 router = APIRouter()
 
@@ -23,9 +23,7 @@ def predict_salary(
     The prediction is based on the job title, location, and a description
     built from the user's skills and experience combined with the job's requirements.
     """
-    db_user = db.query(user_model.User).filter(user_model.User.id == current_user.id).first()
-    if not db_user or not db_user.parsed_cv_data:
-        raise HTTPException(status_code=404, detail="CV data not found. Please upload a CV first.")
+    db_user = get_user_with_cv_data(db, current_user, require_cv=True)
 
     # Combine user's skills and experiences with job info for a richer description
     user_skills = ", ".join(db_user.parsed_cv_data.get('skills', []))
@@ -42,9 +40,5 @@ def predict_salary(
         )
         return schemas.SalaryPredictionResponse(**salary_data)
 
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=503, detail=f"Model not found: {e}")
-    except RuntimeError as e:
-        raise HTTPException(status_code=503, detail=f"Prediction service error: {e}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}") 
+        raise handle_service_error(e, "Salary Prediction") 

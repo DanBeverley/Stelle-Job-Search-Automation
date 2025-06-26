@@ -3,9 +3,8 @@ from sqlalchemy.orm import Session
 from .. import schemas
 from ..services import skill_analysis_service
 from ..models.db.database import get_db
-from ..models.db import user as user_model
 from .auth import get_current_active_user
-import requests
+from ..utils.api_helpers import get_user_with_cv_data, handle_service_error
 
 router = APIRouter()
 
@@ -24,12 +23,7 @@ def analyze_skills(
     skills required by a job description. Returns matched skills, missing skills,
     and recommended edX courses to fill the gaps.
     """
-    db_user = db.query(user_model.User).filter(user_model.User.id == current_user.id).first()
-    if not db_user or not db_user.parsed_cv_data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="CV data not found for the user. Please upload and parse a CV first."
-        )
+    db_user = get_user_with_cv_data(db, current_user, require_cv=True)
 
     user_skills = db_user.parsed_cv_data.get('skills', [])
     if not user_skills:
@@ -44,13 +38,5 @@ def analyze_skills(
             user_skills=user_skills
         )
         return schemas.SkillAnalysisResponse(**analysis_result)
-    except requests.exceptions.RequestException as e:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Could not connect to the course recommendation service: {e}"
-        )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An unexpected error occurred during skill analysis: {e}"
-        ) 
+        raise handle_service_error(e, "Skill Analysis") 
