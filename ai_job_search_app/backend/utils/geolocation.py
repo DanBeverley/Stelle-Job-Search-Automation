@@ -1,4 +1,7 @@
 import requests
+import logging
+
+logger = logging.getLogger(__name__)
 
 def get_location_from_ip(ip_address: str) -> dict:
     """
@@ -26,5 +29,5 @@ def get_location_from_ip(ip_address: str) -> dict:
             }
         return None
     except requests.exceptions.RequestException as e:
-        print(f"Geolocation request failed: {e}")
+        logger.error("Geolocation request failed: %s", str(e))
         return None 
