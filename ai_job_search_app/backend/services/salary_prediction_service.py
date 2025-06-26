@@ -2,7 +2,10 @@ import joblib
 import xgboost as xgb
 import pandas as pd
 import os
+import logging
 from typing import Dict, Any
+
+logger = logging.getLogger(__name__)
 
 class SalaryPredictor:
     _instance = None
@@ -20,33 +23,34 @@ class SalaryPredictor:
         if self.model_loaded:
             return
         
-        MODEL_DIR = "ai_job_search_app/data/models/salary_predictor"
-        MODEL_FILE = os.path.join(MODEL_DIR, "xgb_salary_model.json")
-        PREPROCESSOR_FILE = os.path.join(MODEL_DIR, "preprocessor.joblib")
+        # Updated paths to point to final_model directory
+        MODEL_DIR = "ai_job_search_app/final_model"
+        MODEL_FILE = os.path.join(MODEL_DIR, "salary_predictor_xgboost.json")
+        PREPROCESSOR_FILE = os.path.join(MODEL_DIR, "salary_predictor_preprocessor.joblib")
 
         try:
             if not os.path.exists(MODEL_FILE) or not os.path.exists(PREPROCESSOR_FILE):
                 raise FileNotFoundError("Salary model or preprocessor not found.")
 
-            print("Loading salary prediction model and preprocessor...")
+            logger.info("Loading salary prediction model and preprocessor...")
             self.model = xgb.XGBRegressor()
             self.model.load_model(MODEL_FILE)
             self.preprocessor = joblib.load(PREPROCESSOR_FILE)
             self.model_loaded = True
-            print("--- Salary prediction model loaded successfully ---")
+            logger.info("Salary prediction model loaded successfully")
         except Exception as e:
-            print(f"--- FATAL: Error loading salary model: {e} ---")
+            logger.error("Error loading salary model: %s", str(e))
             self.model_loaded = False
 
     def predict(self, job_title: str, location: str, job_description: str) -> float:
         if not self.model_loaded:
             raise RuntimeError("Salary prediction model is not loaded.")
         
-        # Create a DataFrame from the input
+        # Create a DataFrame from the input (using column names expected by the model)
         input_data = pd.DataFrame({
-            'Job.Title': [job_title],
-            'Location': [location],
-            'Job.Description': [job_description]
+            'title': [job_title],
+            'location': [location],
+            'description': [job_description]
         })
 
         # The preprocessor and model expect a DataFrame
