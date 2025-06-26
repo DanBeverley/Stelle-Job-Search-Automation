@@ -4,8 +4,10 @@ import pandas as pd
 import os
 import logging
 from typing import Dict, Any
+from ..config.settings import get_settings
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 class SalaryPredictor:
     _instance = None
@@ -23,10 +25,9 @@ class SalaryPredictor:
         if self.model_loaded:
             return
         
-        # Updated paths to point to final_model directory
-        MODEL_DIR = "ai_job_search_app/final_model"
-        MODEL_FILE = os.path.join(MODEL_DIR, "salary_predictor_xgboost.json")
-        PREPROCESSOR_FILE = os.path.join(MODEL_DIR, "salary_predictor_preprocessor.joblib")
+        # Use centralized configuration for model paths
+        MODEL_FILE = settings.salary_model_full_path
+        PREPROCESSOR_FILE = settings.salary_preprocessor_full_path
 
         try:
             if not os.path.exists(MODEL_FILE) or not os.path.exists(PREPROCESSOR_FILE):

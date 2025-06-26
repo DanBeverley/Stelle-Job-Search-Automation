@@ -1,17 +1,16 @@
-import os
 import base64
 import logging
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
+from ..config.settings import get_settings
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
-# It's crucial to set this environment variable in deployment environment.
-# For local development,  add it to a .env file.
-# Example for generating a key: python -c "import secrets; print(secrets.token_hex(16))"
-ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
+# Use centralized configuration for encryption key
+ENCRYPTION_KEY = settings.encryption_key
 if not ENCRYPTION_KEY:
-    raise ValueError("No ENCRYPTION_KEY set for FastAPI application")
+    raise ValueError("No ENCRYPTION_KEY set in configuration")
 
 # The key must be 16, 24, or 32 bytes long (for AES-128, AES-192, or AES-256).
 key = bytes.fromhex(ENCRYPTION_KEY)
