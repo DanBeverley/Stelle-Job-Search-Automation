@@ -1,9 +1,11 @@
 import os
 import requests
+import logging
 from typing import List, Dict, Any
 from dotenv import load_dotenv
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 ADZUNA_APP_ID = os.getenv("ADZUNA_APP_ID")
 ADZUNA_APP_KEY = os.getenv("ADZUNA_APP_KEY")
@@ -15,7 +17,7 @@ def search_adzuna_jobs(keyword: str, location: str) -> List[Dict[str, Any]]:
     Searches for jobs on Adzuna and returns them in a standardized format.
     """
     if not ADZUNA_APP_ID or not ADZUNA_APP_KEY:
-        print("Warning: Adzuna API credentials not set. Skipping search.")
+        logger.warning("Adzuna API credentials not set. Skipping search.")
         return []
 
     params = {
@@ -45,5 +47,5 @@ def search_adzuna_jobs(keyword: str, location: str) -> List[Dict[str, Any]]:
         return standardized_jobs
 
     except requests.exceptions.RequestException as e:
-        print(f"Adzuna API request failed: {e}")
+        logger.error("Adzuna API request failed: %s", str(e))
         return [] 
