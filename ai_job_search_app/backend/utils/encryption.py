@@ -1,7 +1,10 @@
 import os
 import base64
+import logging
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
+
+logger = logging.getLogger(__name__)
 
 # It's crucial to set this environment variable in deployment environment.
 # For local development,  add it to a .env file.
@@ -39,5 +42,5 @@ def decrypt_data(encrypted_data: str) -> str:
         return plain_text
     except (ValueError, KeyError) as e:
         # Handle potential errors during decryption (e.g., tampered data)
-        print(f"Decryption failed: {e}")
+        logger.error("Decryption failed: %s", str(e))
         return None 
