@@ -1,3 +1,4 @@
+import os
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -7,6 +8,14 @@ from .api import auth, cv_parser, resume_builder, job_search, interview_prep, sa
 from .models.db.database import engine, Base
 from .models.db import user as user_model
 from .models.db import application as application_model
+from .utils.logging_config import setup_logging, get_logger
+
+# Setup logging configuration
+setup_logging(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    log_file=os.getenv("LOG_FILE")
+)
+logger = get_logger(__name__)
 
 app = FastAPI()
 
@@ -23,10 +32,13 @@ app.include_router(skill_analysis.router, prefix="/api/skills", tags=["Skill Ana
 
 @app.on_event("startup")
 def on_startup():
+    """Initialize database tables and log application startup."""
+    logger.info("Starting AI Job Search Application...")
     # Uses the Base metadata to create all tables.
     # Ensure table definition by importing 
     # Registered with the Base metadata before this call is made.
     Base.metadata.create_all(bind=engine)
+    logger.info("Database tables initialized successfully")
 
 @app.get("/")
 def read_root():
