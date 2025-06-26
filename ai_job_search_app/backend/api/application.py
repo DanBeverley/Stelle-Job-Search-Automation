@@ -1,11 +1,12 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from .. import schemas
 from ..services import application_tracker as application_service
 from ..models.db.database import get_db
 from .auth import get_current_active_user
+from ..utils.api_helpers import check_resource_exists
 
 router = APIRouter()
 
@@ -49,8 +50,7 @@ def read_application(
     db_application = application_service.get_application_by_id(
         db, application_id=application_id, user_id=current_user.id
     )
-    if db_application is None:
-        raise HTTPException(status_code=404, detail="Application not found")
+    check_resource_exists(db_application, "Application")
     return db_application
 
 @router.put("/{application_id}", response_model=schemas.Application)
@@ -66,8 +66,7 @@ def update_application(
     db_application = application_service.update_application(
         db, application_id=application_id, application_update=application, user_id=current_user.id
     )
-    if db_application is None:
-        raise HTTPException(status_code=404, detail="Application not found")
+    check_resource_exists(db_application, "Application")
     return db_application
 
 @router.delete("/{application_id}", response_model=schemas.Application)
@@ -82,6 +81,5 @@ def delete_application(
     db_application = application_service.delete_application(
         db, application_id=application_id, user_id=current_user.id
     )
-    if db_application is None:
-        raise HTTPException(status_code=404, detail="Application not found")
+    check_resource_exists(db_application, "Application")
     return db_application 
