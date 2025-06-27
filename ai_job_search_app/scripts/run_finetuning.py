@@ -234,8 +234,7 @@ def train_cover_letter_model(output_dir):
         args=training_args,
         train_dataset=split_dataset['train'],
         eval_dataset=split_dataset['test'],
-        formatting_func=lambda x: x["text"],
-        max_seq_length=512
+        formatting_func=lambda x: x["text"]
     )
     
     trainer.train()
@@ -283,7 +282,6 @@ def train_interview_model(output_dir):
         train_dataset=split_dataset['train'],
         eval_dataset=split_dataset['test'],
         formatting_func=lambda x: x["text"],
-        max_seq_length=256,
         callbacks=[EarlyStoppingWithTargetLoss(target_loss=1.8, patience=5)]
     )
     
