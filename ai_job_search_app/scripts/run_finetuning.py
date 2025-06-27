@@ -73,39 +73,116 @@ def get_lora_config(r=16, lora_alpha=32, lora_dropout=0.05):
         lora_dropout=lora_dropout, bias="none", task_type=TaskType.CAUSAL_LM
     )
 
-def create_synthetic_cover_letters(n_samples=500):
+def create_synthetic_cover_letters(n_samples=2000):
     set_random_seeds(42)
     
-    job_titles = ["Software Engineer", "Data Scientist", "Product Manager", "DevOps Engineer"]
-    companies = ["Google", "Microsoft", "Amazon", "Apple", "Meta", "Netflix"]
+    job_titles = [
+        "Software Engineer", "Senior Software Engineer", "Data Scientist", "Product Manager", 
+        "DevOps Engineer", "Full Stack Developer", "Backend Developer", "Frontend Developer",
+        "Machine Learning Engineer", "Technical Lead", "Engineering Manager", "QA Engineer"
+    ]
     
-    template = """Dear Hiring Manager,
+    companies = [
+        "Google", "Microsoft", "Amazon", "Apple", "Meta", "Netflix", "Uber", "Airbnb",
+        "Tesla", "SpaceX", "Stripe", "Shopify", "Adobe", "Salesforce", "Oracle", "IBM"
+    ]
+    
+    templates = [
+        """Dear Hiring Manager,
 
-I am writing to express my interest in the {job_title} position at {company}. With {years} years of experience in software development, I am excited about the opportunity to contribute to your team.
+I am writing to express my strong interest in the {job_title} position at {company}. With {years} years of experience in {domain}, I am excited about the opportunity to contribute to your innovative team.
 
-My expertise in {tech_stack} and passion for clean code align with {company}'s commitment to excellence. I am particularly drawn to {company}'s innovative approach to solving complex problems.
+My expertise in {tech_stack} has enabled me to {achievement}. I am particularly drawn to {company}'s {company_strength} and believe my background in {specialty} would be valuable for your {department} team.
 
-Thank you for considering my application.
+In my previous role, I {previous_work} which resulted in {outcome}. I am passionate about {passion} and continuously stay updated with {learning_area}.
+
+Thank you for considering my application. I look forward to discussing how I can contribute to {company}'s continued success.
 
 Best regards,
+[Your Name]""",
+
+        """Dear {company} Team,
+
+I am excited to apply for the {job_title} role. As a {experience_level} professional with {years} years in {field}, I have developed strong skills in {skills} that align perfectly with your requirements.
+
+Throughout my career, I have {career_highlight} and {project_work}. My experience with {tech_stack} and {methodology} has prepared me to tackle the challenges facing {company}'s {team} team.
+
+I am particularly interested in {company} because of {reason}. Your commitment to {value} resonates with my professional values and career goals.
+
+I would welcome the opportunity to discuss how my {strength1} and {strength2} can contribute to {company}'s mission.
+
+Sincerely,
+[Your Name]""",
+
+        """Hello {company} Hiring Team,
+
+I am writing to apply for the {job_title} position. With a background in {background} and {years} years of hands-on experience, I am confident I can make a meaningful contribution to your team.
+
+My technical expertise includes {tech_stack}, and I have successfully {success_story}. I am passionate about {tech_interest} and have experience in {additional_skills}.
+
+What excites me most about {company} is {excitement_reason}. I am eager to bring my skills in {key_skills} to help {company} {company_goal}.
+
+Thank you for your time and consideration. I look forward to the opportunity to discuss my qualifications further.
+
+Best,
 [Your Name]"""
+    ]
     
     tech_stacks = [
-        "Python, Django, PostgreSQL", "JavaScript, React, Node.js", 
-        "Java, Spring Boot, MySQL", "Go, Docker, Kubernetes"
+        "Python, Django, PostgreSQL", "JavaScript, React, Node.js", "Java, Spring Boot, MySQL",
+        "Go, Docker, Kubernetes", "C#, .NET, Azure", "Ruby on Rails, Redis", "Swift, iOS Development",
+        "Kotlin, Android Development", "Vue.js, TypeScript", "Angular, RxJS", "React Native, Firebase",
+        "PHP, Laravel, MongoDB", "Scala, Spark, Kafka", "Rust, WebAssembly", "Flutter, Dart"
     ]
+    
+    domains = ["software development", "data science", "machine learning", "web development", "mobile development", "cloud computing"]
+    achievements = ["deliver scalable solutions", "optimize system performance", "lead cross-functional teams", "implement best practices"]
+    company_strengths = ["innovative culture", "technical excellence", "market leadership", "commitment to quality"]
     
     data = []
     for i in range(n_samples):
+        template = random.choice(templates)
+        job_title = random.choice(job_titles)
+        company = random.choice(companies)
+        
+        cover_letter = template.format(
+            job_title=job_title,
+            company=company,
+            years=random.randint(2, 8),
+            domain=random.choice(domains),
+            tech_stack=random.choice(tech_stacks),
+            achievement=random.choice(achievements),
+            company_strength=random.choice(company_strengths),
+            specialty="backend systems" if "Backend" in job_title else "full-stack development",
+            department="engineering",
+            previous_work="led the development of microservices architecture",
+            outcome="40% improvement in system performance",
+            passion="building scalable applications",
+            learning_area="emerging technologies",
+            experience_level="experienced",
+            field="software engineering",
+            skills="problem-solving and system design",
+            career_highlight="successfully delivered multiple high-impact projects",
+            project_work="collaborated with product teams to define technical requirements",
+            methodology="agile development practices",
+            team="product",
+            reason="your reputation for innovation",
+            value="technical excellence",
+            strength1="analytical thinking",
+            strength2="collaborative approach",
+            background="computer science",
+            success_story="reduced deployment time by 60%",
+            tech_interest="cloud-native technologies",
+            additional_skills="DevOps and CI/CD",
+            excitement_reason="the opportunity to work on cutting-edge technology",
+            key_skills="software architecture and team leadership",
+            company_goal="achieve its ambitious growth targets"
+        )
+        
+        prompt = f"Write a professional cover letter for a {job_title} position at {company}."
+        
         data.append({
-            "Job Title": random.choice(job_titles),
-            "Hiring Company": random.choice(companies),
-            "Cover Letter": template.format(
-                job_title=random.choice(job_titles),
-                company=random.choice(companies),
-                years=random.randint(2, 8),
-                tech_stack=random.choice(tech_stacks)
-            )
+            "text": f"### Human: {prompt}\n\n### Assistant: {cover_letter}\n\n### End"
         })
     
     return Dataset.from_list(data)
@@ -124,26 +201,8 @@ def load_dataset_with_retry(dataset_name, max_retries=3):
                 raise e
 
 def prepare_cover_letter_data():
-    try:
-        dataset = load_dataset_with_retry("PolyAI/job-posting-classification")
-        if len(dataset) < 100:
-            raise ValueError("Dataset too small")
-        
-        logger.info(f"Dataset loaded with {len(dataset)} samples")
-        logger.info(f"Dataset columns: {dataset.column_names}")
-        
-        processed_data = []
-        for item in dataset:
-            if 'job_description' in item and 'job_title' in item:
-                prompt = f"Write a cover letter for: {item['job_title']}\nDescription: {item['job_description'][:200]}"
-                response = f"Dear Hiring Manager,\n\nI am interested in the {item['job_title']} position. With my relevant experience and skills, I believe I would be a valuable addition to your team. Thank you for your consideration.\n\nBest regards,\n[Your Name]"
-                processed_data.append({"text": f"### Human: {prompt}\n\n### Assistant: {response}\n\n### End"})
-        
-        logger.info(f"Processed {len(processed_data)} samples for cover letter training")
-        return Dataset.from_list(processed_data[:1000])
-    except Exception as e:
-        logger.warning(f"Dataset loading failed: {e}. Using synthetic cover letter data")
-        return create_synthetic_cover_letters()
+    logger.info("Using synthetic cover letter data for reliable training")
+    return create_synthetic_cover_letters()
 
 def create_synthetic_interview_data(n_samples=2000):
     set_random_seeds(42)
@@ -298,14 +357,20 @@ def train_cover_letter_model(output_dir):
     training_args = TrainingArguments(
         output_dir=output_dir,
         per_device_train_batch_size=2,
-        gradient_accumulation_steps=8,
+        gradient_accumulation_steps=16,
         learning_rate=2e-5,
-        num_train_epochs=3,
+        num_train_epochs=5,
         eval_strategy="steps",
-        eval_steps=50,
-        save_strategy="epoch",
+        eval_steps=100,
+        save_strategy="steps", 
+        save_steps=100,
         fp16=True,
-        report_to="none"
+        report_to="none",
+        load_best_model_at_end=True,
+        metric_for_best_model="eval_loss",
+        greater_is_better=False,
+        warmup_steps=200,
+        logging_steps=20
     )
     
     trainer = SFTTrainer(
@@ -349,7 +414,8 @@ def train_interview_model(output_dir):
         num_train_epochs=5,
         eval_strategy="steps",
         eval_steps=50,
-        save_strategy="epoch",
+        save_strategy="steps",
+        save_steps=50,
         fp16=True,
         report_to="none",
         load_best_model_at_end=True,
