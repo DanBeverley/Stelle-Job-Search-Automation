@@ -234,7 +234,7 @@ def train_cover_letter_model(output_dir):
         args=training_args,
         train_dataset=split_dataset['train'],
         eval_dataset=split_dataset['test'],
-        dataset_text_field="text",
+        formatting_func=lambda x: x["text"],
         max_seq_length=512
     )
     
@@ -282,7 +282,7 @@ def train_interview_model(output_dir):
         args=training_args,
         train_dataset=split_dataset['train'],
         eval_dataset=split_dataset['test'],
-        dataset_text_field="text",
+        formatting_func=lambda x: x["text"],
         max_seq_length=256,
         callbacks=[EarlyStoppingWithTargetLoss(target_loss=1.8, patience=5)]
     )
@@ -299,22 +299,37 @@ def train_salary_model(output_dir):
     # Verify script exists
     if not os.path.exists(script_path):
         logger.error(f"Salary training script not found at: {script_path}")
-        raise RuntimeError(f"Salary training script not found: {script_path}")
+        # Try alternative path
+        alt_script_path = "train_salary_model.py"
+        if os.path.exists(alt_script_path):
+            script_path = alt_script_path
+            logger.info(f"Found script at alternative path: {script_path}")
+        else:
+            raise RuntimeError(f"Salary training script not found: {script_path}")
     
     logger.info(f"Running salary training script: {script_path}")
-    result = run([
-        "python", script_path, 
-        "--output_dir", output_dir,
-        "--format", "transformers"
-    ], capture_output=True, text=True)
-    
-    if result.returncode != 0:
-        logger.error(f"Salary model training failed: {result.stderr}")
+    try:
+        result = run([
+            "python", script_path, 
+            "--output_dir", output_dir,
+            "--format", "transformers"
+        ], capture_output=True, text=True, timeout=1800)  # 30 min timeout
+        
+        if result.returncode != 0:
+            logger.error(f"Salary model training failed with exit code: {result.returncode}")
+            if result.stderr:
+                logger.error(f"Stderr: {result.stderr}")
+            if result.stdout:
+                logger.error(f"Stdout: {result.stdout}")
+            raise RuntimeError("Salary model training failed")
+        
+        logger.info("Salary model training completed successfully")
         if result.stdout:
-            logger.error(f"Stdout: {result.stdout}")
-        raise RuntimeError("Salary model training failed")
-    
-    logger.info("Salary model training completed successfully")
+            logger.info(f"Training output: {result.stdout}")
+            
+    except Exception as e:
+        logger.error(f"Exception during salary model training: {e}")
+        raise RuntimeError(f"Salary model training failed: {e}")
 
 def main():
     if not IMPORTS_SUCCESSFUL:
