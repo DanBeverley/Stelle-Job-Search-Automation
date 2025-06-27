@@ -129,42 +129,123 @@ def prepare_cover_letter_data():
         if len(dataset) < 100:
             raise ValueError("Dataset too small")
         
+        logger.info(f"Dataset loaded with {len(dataset)} samples")
+        logger.info(f"Dataset columns: {dataset.column_names}")
+        
         processed_data = []
         for item in dataset:
             if 'job_description' in item and 'job_title' in item:
                 prompt = f"Write a cover letter for: {item['job_title']}\nDescription: {item['job_description'][:200]}"
-                response = f"Dear Hiring Manager,\n\nI am interested in the {item['job_title']} position..."
+                response = f"Dear Hiring Manager,\n\nI am interested in the {item['job_title']} position. With my relevant experience and skills, I believe I would be a valuable addition to your team. Thank you for your consideration.\n\nBest regards,\n[Your Name]"
                 processed_data.append({"text": f"### Human: {prompt}\n\n### Assistant: {response}\n\n### End"})
         
+        logger.info(f"Processed {len(processed_data)} samples for cover letter training")
         return Dataset.from_list(processed_data[:1000])
-    except:
-        logger.warning("Using synthetic cover letter data")
+    except Exception as e:
+        logger.warning(f"Dataset loading failed: {e}. Using synthetic cover letter data")
         return create_synthetic_cover_letters()
 
-def create_synthetic_interview_data(n_samples=500):
+def create_synthetic_interview_data(n_samples=2000):
     set_random_seeds(42)
     
     questions = [
-        "Tell me about yourself", "What are your strengths?", "Why do you want this job?",
-        "Describe a challenging project", "How do you handle stress?", "Where do you see yourself in 5 years?"
+        "Tell me about yourself and your background",
+        "What are your key strengths and how do they apply to this role?",
+        "Why do you want to work for our company?",
+        "Describe a challenging project you've worked on recently",
+        "How do you handle stress and tight deadlines?",
+        "Where do you see yourself in 5 years?",
+        "What motivates you in your work?",
+        "How do you stay updated with new technologies?",
+        "Describe a time when you had to work with a difficult team member",
+        "What's your biggest professional achievement?",
+        "How do you approach problem-solving?",
+        "What are your salary expectations?",
+        "Why are you looking to leave your current position?",
+        "How do you prioritize your work when you have multiple deadlines?",
+        "What programming languages are you most comfortable with?",
+        "Describe your experience with agile development methodologies",
+        "How do you ensure code quality in your projects?",
+        "What's the most complex system you've designed?",
+        "How do you handle feedback and criticism?",
+        "What questions do you have for us?"
     ]
     
-    responses = [
-        "I'm a software engineer with {years} years of experience...",
-        "My key strength is problem-solving and attention to detail...",
-        "I'm excited about this role because it aligns with my career goals...",
-        "I recently worked on a project that required {tech} skills...",
-        "I handle stress by prioritizing tasks and taking breaks...",
-        "In 5 years, I see myself in a senior technical role..."
+    response_templates = [
+        "I'm a {role} with {years} years of experience in {tech}. I've worked on various projects including {project_type}, and I'm passionate about {passion}. I have strong skills in {skills} and enjoy {activity}.",
+        "My key strengths include {strength1}, {strength2}, and {strength3}. These help me {benefit} and deliver {outcome}. For example, {example}.",
+        "I'm excited about this opportunity because {reason1}. Your company's {company_aspect} aligns with my {value}. I believe I can contribute by {contribution}.",
+        "Recently, I worked on {project} which required {tech_stack}. The main challenge was {challenge}, which I solved by {solution}. The result was {outcome}.",
+        "I handle stress by {method1} and {method2}. When facing tight deadlines, I {approach} and {strategy}. This helps me maintain {quality} while meeting requirements.",
+        "In 5 years, I see myself as {future_role} where I can {future_goal}. I plan to develop my skills in {skill_area} and {growth_area}.",
+        "I'm motivated by {motivation1} and {motivation2}. I find satisfaction in {satisfaction} and enjoy {enjoyment}.",
+        "I stay updated through {method1}, {method2}, and {method3}. I regularly {activity} and participate in {community}.",
+        "I approach difficult situations by {approach1} and {approach2}. Communication is key, so I {communication_strategy}.",
+        "My biggest achievement was {achievement} where I {action} and achieved {result}. This demonstrated my ability to {skill}."
     ]
+    
+    # Define replacement values
+    roles = ["Software Engineer", "Full Stack Developer", "Backend Developer", "Frontend Developer", "DevOps Engineer", "Data Scientist"]
+    years_exp = ["2", "3", "4", "5", "6", "7", "8"]
+    technologies = ["Python and Django", "JavaScript and React", "Java and Spring", "Node.js and MongoDB", "AWS and Docker"]
+    project_types = ["web applications", "microservices", "data pipelines", "mobile apps", "automation tools"]
+    passions = ["clean code", "user experience", "system architecture", "performance optimization", "continuous learning"]
+    skills = ["problem-solving", "team collaboration", "technical leadership", "code review", "system design"]
     
     data = []
     for i in range(n_samples):
         question = random.choice(questions)
-        response = random.choice(responses).format(
-            years=random.randint(2, 8),
-            tech=random.choice(["Python", "JavaScript", "Java", "React"])
+        template = random.choice(response_templates)
+        
+        # Fill template with random values
+        response = template.format(
+            role=random.choice(roles),
+            years=random.choice(years_exp),
+            tech=random.choice(technologies),
+            project_type=random.choice(project_types),
+            passion=random.choice(passions),
+            skills=", ".join(random.sample(skills, 2)),
+            activity="learning new technologies",
+            strength1="analytical thinking",
+            strength2="attention to detail", 
+            strength3="effective communication",
+            benefit="deliver high-quality solutions",
+            outcome="successful project delivery",
+            example="in my last project, these skills helped me identify and resolve critical bugs before deployment",
+            reason1="the innovative projects and growth opportunities",
+            company_aspect="commitment to technological excellence",
+            value="professional development goals",
+            contribution="leveraging my experience to drive technical innovation",
+            project="a scalable e-commerce platform",
+            tech_stack="microservices architecture with Docker and Kubernetes",
+            challenge="handling high traffic loads during peak seasons",
+            solution="implementing caching strategies and load balancing",
+            method1="breaking down tasks into manageable chunks",
+            method2="maintaining clear communication with stakeholders",
+            approach="prioritizing critical tasks",
+            strategy="working closely with the team",
+            quality="high code quality",
+            future_role="a senior technical lead",
+            future_goal="mentor junior developers and drive architectural decisions",
+            skill_area="machine learning",
+            growth_area="cloud technologies",
+            motivation1="solving complex technical challenges",
+            motivation2="seeing the impact of my work on users",
+            satisfaction="building efficient, scalable solutions",
+            enjoyment="collaborating with cross-functional teams",
+            method1="following tech blogs and industry publications",
+            method2="attending conferences and webinars",
+            method3="contributing to open-source projects",
+            community="developer communities and forums",
+            approach1="listening actively to understand their perspective",
+            approach2="finding common ground and shared goals",
+            communication_strategy="schedule one-on-one meetings to address concerns",
+            achievement="leading the migration of our legacy system to a modern architecture",
+            action="coordinated a team of 5 developers",
+            result="50% improvement in system performance",
+            skill="lead complex technical initiatives"
         )
+        
         data.append({"text": f"### Human: {question}\n\n### Assistant: {response}\n\n### End"})
     
     return Dataset.from_list(data)
@@ -242,10 +323,13 @@ def train_cover_letter_model(output_dir):
     tokenizer.save_pretrained(output_dir)
 
 def train_interview_model(output_dir):
-    logger.info("Training interview model with ultra-conservative settings")
+    logger.info("Training interview model with production settings")
     
     dataset = prepare_interview_data()
     split_dataset = dataset.train_test_split(test_size=0.1, seed=42)
+    
+    logger.info(f"Interview training samples: {len(split_dataset['train'])}")
+    logger.info(f"Interview eval samples: {len(split_dataset['test'])}")
     
     model_id = "gpt2"
     tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -256,24 +340,25 @@ def train_interview_model(output_dir):
     )
     model.config.use_cache = False
     
-    lora_config = get_lora_config(r=16, lora_alpha=32, lora_dropout=0.25)
+    lora_config = get_lora_config(r=32, lora_alpha=64, lora_dropout=0.1)
     model = get_peft_model(model, lora_config)
     
     training_args = TrainingArguments(
         output_dir=output_dir,
-        per_device_train_batch_size=1,
-        gradient_accumulation_steps=64,
-        learning_rate=1e-6,
-        num_train_epochs=2,
+        per_device_train_batch_size=2,
+        gradient_accumulation_steps=16,
+        learning_rate=2e-5,
+        num_train_epochs=5,
         eval_strategy="steps",
-        eval_steps=25,
-        save_strategy="steps",
-        save_steps=25,
+        eval_steps=50,
+        save_strategy="epoch",
         fp16=True,
         report_to="none",
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
-        greater_is_better=False
+        greater_is_better=False,
+        warmup_steps=100,
+        logging_steps=10
     )
     
     trainer = SFTTrainer(
@@ -290,41 +375,122 @@ def train_interview_model(output_dir):
     tokenizer.save_pretrained(output_dir)
 
 def train_salary_model(output_dir):
-    logger.info("Training salary model using existing script")
+    logger.info("Training salary model using XGBoost (lightweight alternative)")
     
-    script_path = os.path.join(os.path.dirname(__file__), "train_salary_model.py")
-    
-    # Verify script exists
-    if not os.path.exists(script_path):
-        logger.error(f"Salary training script not found at: {script_path}")
-        # Try alternative path
-        alt_script_path = "train_salary_model.py"
-        if os.path.exists(alt_script_path):
-            script_path = alt_script_path
-            logger.info(f"Found script at alternative path: {script_path}")
-        else:
-            raise RuntimeError(f"Salary training script not found: {script_path}")
-    
-    logger.info(f"Running salary training script: {script_path}")
+    # Create a simple salary prediction model using synthetic data
     try:
-        result = run([
-            "python", script_path, 
-            "--output_dir", output_dir,
-            "--format", "transformers"
-        ], capture_output=True, text=True, timeout=1800)  # 30 min timeout
+        import xgboost as xgb
+        import pandas as pd
+        from sklearn.model_selection import train_test_split
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        from sklearn.preprocessing import LabelEncoder
+        import joblib
         
-        if result.returncode != 0:
-            logger.error(f"Salary model training failed with exit code: {result.returncode}")
-            if result.stderr:
-                logger.error(f"Stderr: {result.stderr}")
-            if result.stdout:
-                logger.error(f"Stdout: {result.stdout}")
-            raise RuntimeError("Salary model training failed")
+        # Generate synthetic salary data
+        set_random_seeds(42)
+        
+        job_titles = ["Software Engineer", "Senior Software Engineer", "Lead Developer", "Engineering Manager", 
+                     "Data Scientist", "DevOps Engineer", "Full Stack Developer", "Backend Developer", 
+                     "Frontend Developer", "Mobile Developer"]
+        
+        experience_levels = ["Entry", "Mid", "Senior", "Lead"]
+        locations = ["San Francisco", "New York", "Seattle", "Austin", "Remote"]
+        
+        # Create synthetic dataset
+        data = []
+        for _ in range(5000):
+            title = random.choice(job_titles)
+            exp = random.choice(experience_levels)
+            loc = random.choice(locations)
+            
+            # Generate salary based on simple rules
+            base_salary = 70000
+            if "Senior" in title or "Lead" in title:
+                base_salary += 30000
+            if "Manager" in title:
+                base_salary += 50000
+            if exp == "Senior":
+                base_salary += 20000
+            elif exp == "Lead":
+                base_salary += 40000
+            if loc in ["San Francisco", "New York"]:
+                base_salary += 20000
+            elif loc == "Seattle":
+                base_salary += 15000
+            
+            # Add some randomness
+            salary = base_salary + random.randint(-15000, 25000)
+            
+            data.append({
+                "job_title": title,
+                "experience_level": exp,
+                "location": loc,
+                "salary": salary
+            })
+        
+        df = pd.DataFrame(data)
+        logger.info(f"Generated {len(df)} synthetic salary records")
+        
+        # Prepare features
+        vectorizer = TfidfVectorizer(max_features=100)
+        title_features = vectorizer.fit_transform(df['job_title']).toarray()
+        
+        le_exp = LabelEncoder()
+        exp_features = le_exp.fit_transform(df['experience_level']).reshape(-1, 1)
+        
+        le_loc = LabelEncoder()
+        loc_features = le_loc.fit_transform(df['location']).reshape(-1, 1)
+        
+        # Combine features
+        import numpy as np
+        X = np.hstack([title_features, exp_features, loc_features])
+        y = df['salary'].values
+        
+        # Split data
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        
+        # Train XGBoost model
+        model = xgb.XGBRegressor(
+            n_estimators=100,
+            max_depth=6,
+            learning_rate=0.1,
+            random_state=42
+        )
+        
+        logger.info("Training XGBoost salary prediction model...")
+        model.fit(X_train, y_train)
+        
+        # Evaluate
+        train_score = model.score(X_train, y_train)
+        test_score = model.score(X_test, y_test)
+        
+        logger.info(f"Training R²: {train_score:.3f}")
+        logger.info(f"Test R²: {test_score:.3f}")
+        
+        # Save model and preprocessing components
+        os.makedirs(output_dir, exist_ok=True)
+        
+        joblib.dump(model, os.path.join(output_dir, "salary_model.pkl"))
+        joblib.dump(vectorizer, os.path.join(output_dir, "title_vectorizer.pkl"))
+        joblib.dump(le_exp, os.path.join(output_dir, "experience_encoder.pkl"))
+        joblib.dump(le_loc, os.path.join(output_dir, "location_encoder.pkl"))
+        
+        # Save model info
+        model_info = {
+            "model_type": "xgboost",
+            "train_r2": train_score,
+            "test_r2": test_score,
+            "features": ["job_title", "experience_level", "location"],
+            "target": "salary"
+        }
+        
+        import json
+        with open(os.path.join(output_dir, "model_info.json"), "w") as f:
+            json.dump(model_info, f, indent=2)
         
         logger.info("Salary model training completed successfully")
-        if result.stdout:
-            logger.info(f"Training output: {result.stdout}")
-            
+        logger.info(f"Model saved to: {output_dir}")
+        
     except Exception as e:
         logger.error(f"Exception during salary model training: {e}")
         raise RuntimeError(f"Salary model training failed: {e}")
