@@ -325,9 +325,9 @@ class EarlyStoppingWithTargetLoss(EarlyStoppingCallback):
         self.target_loss = target_loss
         self.best_loss = float('inf')
 
-    def on_evaluate(self, args, state, control, model=None, logs=None, **kwargs):
+    def on_evaluate(self, args, state, control, logs=None, **kwargs):
         if logs is None:
-            return super().on_evaluate(args, state, control, model, logs, **kwargs)
+            return super().on_evaluate(args, state, control, logs=logs, **kwargs)
             
         current_loss = logs.get("eval_loss")
         if current_loss and current_loss < self.target_loss:
@@ -337,7 +337,7 @@ class EarlyStoppingWithTargetLoss(EarlyStoppingCallback):
         if current_loss and current_loss < self.best_loss:
             self.best_loss = current_loss
         
-        super().on_evaluate(args, state, control, model, logs, **kwargs)
+        return super().on_evaluate(args, state, control, logs=logs, **kwargs)
 
 def train_cover_letter_model(output_dir):
     logger.info("Training cover letter model")
