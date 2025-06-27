@@ -230,10 +230,10 @@ def train_cover_letter_model(output_dir):
     )
     
     trainer = SFTTrainer(
-        model=model, args=training_args,
+        model=model, 
+        args=training_args,
         train_dataset=split_dataset['train'],
         eval_dataset=split_dataset['test'],
-        tokenizer=tokenizer,
         dataset_text_field="text",
         max_seq_length=512
     )
@@ -278,10 +278,10 @@ def train_interview_model(output_dir):
     )
     
     trainer = SFTTrainer(
-        model=model, args=training_args,
+        model=model, 
+        args=training_args,
         train_dataset=split_dataset['train'],
         eval_dataset=split_dataset['test'],
-        tokenizer=tokenizer,
         dataset_text_field="text",
         max_seq_length=256,
         callbacks=[EarlyStoppingWithTargetLoss(target_loss=1.8, patience=5)]
@@ -295,6 +295,13 @@ def train_salary_model(output_dir):
     logger.info("Training salary model using existing script")
     
     script_path = os.path.join(os.path.dirname(__file__), "train_salary_model.py")
+    
+    # Verify script exists
+    if not os.path.exists(script_path):
+        logger.error(f"Salary training script not found at: {script_path}")
+        raise RuntimeError(f"Salary training script not found: {script_path}")
+    
+    logger.info(f"Running salary training script: {script_path}")
     result = run([
         "python", script_path, 
         "--output_dir", output_dir,
@@ -303,6 +310,8 @@ def train_salary_model(output_dir):
     
     if result.returncode != 0:
         logger.error(f"Salary model training failed: {result.stderr}")
+        if result.stdout:
+            logger.error(f"Stdout: {result.stdout}")
         raise RuntimeError("Salary model training failed")
     
     logger.info("Salary model training completed successfully")
