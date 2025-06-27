@@ -326,6 +326,9 @@ class EarlyStoppingWithTargetLoss(EarlyStoppingCallback):
         self.best_loss = float('inf')
 
     def on_evaluate(self, args, state, control, model=None, logs=None, **kwargs):
+        if logs is None:
+            return super().on_evaluate(args, state, control, model, logs, **kwargs)
+            
         current_loss = logs.get("eval_loss")
         if current_loss and current_loss < self.target_loss:
             logger.info(f"Target loss {self.target_loss} achieved! Current loss: {current_loss}")
@@ -359,18 +362,20 @@ def train_cover_letter_model(output_dir):
         per_device_train_batch_size=2,
         gradient_accumulation_steps=16,
         learning_rate=2e-5,
-        num_train_epochs=5,
+        num_train_epochs=10,
         eval_strategy="steps",
-        eval_steps=100,
+        eval_steps=80,
         save_strategy="steps", 
-        save_steps=100,
+        save_steps=80,
         fp16=True,
         report_to="none",
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
         greater_is_better=False,
-        warmup_steps=200,
-        logging_steps=20
+        warmup_steps=300,
+        logging_steps=20,
+        lr_scheduler_type="cosine",
+        weight_decay=0.01
     )
     
     trainer = SFTTrainer(
@@ -378,7 +383,8 @@ def train_cover_letter_model(output_dir):
         args=training_args,
         train_dataset=split_dataset['train'],
         eval_dataset=split_dataset['test'],
-        formatting_func=lambda x: x["text"]
+        formatting_func=lambda x: x["text"],
+        callbacks=[EarlyStoppingWithTargetLoss(target_loss=0.9, patience=8)]
     )
     
     trainer.train()
@@ -411,18 +417,20 @@ def train_interview_model(output_dir):
         per_device_train_batch_size=2,
         gradient_accumulation_steps=16,
         learning_rate=2e-5,
-        num_train_epochs=5,
+        num_train_epochs=10,
         eval_strategy="steps",
-        eval_steps=50,
+        eval_steps=60,
         save_strategy="steps",
-        save_steps=50,
+        save_steps=60,
         fp16=True,
         report_to="none",
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
         greater_is_better=False,
-        warmup_steps=100,
-        logging_steps=10
+        warmup_steps=300,
+        logging_steps=10,
+        lr_scheduler_type="cosine",
+        weight_decay=0.01
     )
     
     trainer = SFTTrainer(
@@ -431,7 +439,7 @@ def train_interview_model(output_dir):
         train_dataset=split_dataset['train'],
         eval_dataset=split_dataset['test'],
         formatting_func=lambda x: x["text"],
-        callbacks=[EarlyStoppingWithTargetLoss(target_loss=1.8, patience=5)]
+        callbacks=[EarlyStoppingWithTargetLoss(target_loss=0.9, patience=8)]
     )
     
     trainer.train()
