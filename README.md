@@ -32,8 +32,12 @@ pip install -r requirements.txt
 ```
 
 ### 2. Configuration
-Set up your `.env` file with required API keys:
+Set up your `.env` file in the backend directory with required API keys:
 ```bash
+cd ai_job_search_app/backend
+cp .env.example .env  # Edit with your values
+
+# Required configuration
 SECRET_KEY=your-jwt-secret-key
 ENCRYPTION_KEY=your-aes-encryption-key
 ADZUNA_APP_ID=your-adzuna-id
@@ -41,7 +45,20 @@ ADZUNA_APP_KEY=your-adzuna-key
 THEIRSTACK_API_KEY=your-theirstack-key
 ```
 
-### 3. Testing
+### 3. Start Backend Server
+```bash
+cd ai_job_search_app/backend
+python3 -m uvicorn main:app --reload --port 8000
+```
+
+### 4. Start Frontend (Optional)
+```bash
+cd ai_job_search_app/frontend
+npm install
+npm start
+```
+
+### 5. Testing
 ```bash
 # Run comprehensive tests
 python run_tests.py --all
@@ -50,9 +67,32 @@ python run_tests.py --all
 python run_tests.py --suite integration
 ```
 
-### 4. Start Application
+## 🧠 Model Training & Fine-tuning
+
+### Salary Prediction Model
 ```bash
-uvicorn ai_job_search_app.backend.main:app --reload
+cd ai_job_search_app/scripts
+python train_salary_model.py
+```
+
+### NLP Models (BERT, CV Classification)
+```bash
+cd ai_job_search_app/scripts
+python train_nlp.py
+```
+
+### Fine-tune Cover Letter & Interview Models
+```bash
+cd ai_job_search_app/scripts
+python run_finetuning.py --model_type cover_letter
+python run_finetuning.py --model_type interview
+```
+
+### Data Preprocessing
+```bash
+cd ai_job_search_app/scripts
+python preprocess_data.py
+python quantize_model.py  # Optimize models for production
 ```
 
 ## 📊 API Endpoints
@@ -83,10 +123,14 @@ ai_job_search_app/
 │   ├── api/                    # REST API endpoints
 │   ├── services/               # Business logic & ML models
 │   ├── models/                 # Database models
-│   └── utils/                  # Common utilities
-├── tests/                      # Comprehensive test suite
-├── .env                        # Environment configuration
-└── run_tests.py               # Test runner
+│   ├── utils/                  # Common utilities
+│   └── main.py                 # FastAPI application entry
+├── frontend/                   # React frontend (optional)
+├── scripts/                    # Training & preprocessing scripts
+├── data/models/               # Pre-trained models
+├── final_model/               # Fine-tuned model artifacts
+├── tests/                     # Comprehensive test suite
+└── requirements.txt           # Python dependencies
 ```
 
 ## 🔧 ML Models
@@ -97,3 +141,22 @@ ai_job_search_app/
 - **Interview Prep**: DialoGPT-medium with LoRA for question generation
 
 All models support both CPU and GPU execution with automatic device detection.
+
+## 🐛 Troubleshooting
+
+### Common Issues
+- **Import Errors**: Ensure all dependencies are installed via `pip install -r requirements.txt`
+- **Model Loading**: Pre-trained models are loaded from `data/models/` and `final_model/`
+- **API Keys**: Check `.env` file configuration in backend directory
+- **Port Conflicts**: Default backend runs on port 8000, frontend on 3000
+
+### Development
+```bash
+# Backend hot-reload
+cd ai_job_search_app/backend
+python3 -m uvicorn main:app --reload
+
+# Frontend development
+cd ai_job_search_app/frontend
+npm run dev
+```
