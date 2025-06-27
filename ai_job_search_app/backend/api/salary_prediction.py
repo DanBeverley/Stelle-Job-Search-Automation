@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, Body
-from .. import schemas
-from ..services import salary_prediction_service
-from .auth import get_current_active_user
-from ..models.db.database import get_db
-from ..utils.api_helpers import get_user_with_cv_data, handle_service_error
+import schemas
+from services import salary_prediction_service
+from api.auth import get_current_active_user
+from models.db.database import get_db
+from utils.api_helpers import get_user_with_cv_data, handle_service_error
 from sqlalchemy.orm import Session
 
 router = APIRouter()

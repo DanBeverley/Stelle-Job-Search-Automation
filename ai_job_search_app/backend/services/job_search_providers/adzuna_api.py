@@ -1,7 +1,7 @@
 import requests
 import logging
 from typing import List, Dict, Any
-from ...config.settings import get_settings
+from config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()

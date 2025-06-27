@@ -2,11 +2,11 @@ from typing import List
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
-from .. import schemas
-from ..services import application_tracker as application_service
-from ..models.db.database import get_db
-from .auth import get_current_active_user
-from ..utils.api_helpers import check_resource_exists
+import schemas
+from services import application_tracker as application_service
+from models.db.database import get_db
+from api.auth import get_current_active_user
+from utils.api_helpers import check_resource_exists
 
 router = APIRouter()
 

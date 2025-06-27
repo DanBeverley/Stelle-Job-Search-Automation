@@ -2,11 +2,11 @@ import json
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
-from .. import schemas
-from ..models.db.database import get_db
-from ..utils.encryption import encrypt_data
-from .auth import get_current_active_user
-from ..utils.api_helpers import get_user_with_cv_data
+import schemas
+from models.db.database import get_db
+from utils.encryption import encrypt_data
+from api.auth import get_current_active_user
+from utils.api_helpers import get_user_with_cv_data
 
 router = APIRouter(
     tags=["resume"],

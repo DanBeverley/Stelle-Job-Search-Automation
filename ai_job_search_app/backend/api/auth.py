@@ -3,16 +3,16 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials, OAuth2Pas
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
 
-from .. import schemas
-from ..models.db import user as user_model, crud
-from ..security import (
+import schemas
+from models.db import user as user_model, crud
+from security import (
     verify_password, 
     create_access_token, 
     get_password_hash,
     SECRET_KEY,
     ALGORITHM
 )
-from ..models.db.database import get_db
+from models.db.database import get_db
 
 
 router = APIRouter()

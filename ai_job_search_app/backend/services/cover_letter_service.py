@@ -3,8 +3,8 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from peft import PeftModel
 import os
 import logging
-from .. import schemas
-from ..models.db import user as user_model
+import schemas
+from models.db import user as user_model
 
 logger = logging.getLogger(__name__)
 

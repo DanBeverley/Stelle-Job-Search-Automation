@@ -3,12 +3,12 @@ from sqlalchemy.orm import Session
 from typing import Optional, List
 import logging
 
-from .. import schemas
-from ..models.db.database import get_db
-from ..models.db import user as user_model
-from ..api.auth import get_current_active_user
-from ..utils.geolocation import get_location_from_ip
-from ..services.job_search_providers import adzuna_api, theirstack_api
+import schemas
+from models.db.database import get_db
+from models.db import user as user_model
+from api.auth import get_current_active_user
+from utils.geolocation import get_location_from_ip
+from services.job_search_providers import adzuna_api, theirstack_api
 
 logger = logging.getLogger(__name__)
 

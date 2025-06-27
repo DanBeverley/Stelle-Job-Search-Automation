@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from .. import schemas
-from ..services import cover_letter_service
-from ..models.db.database import get_db
-from .auth import get_current_active_user
-from ..utils.api_helpers import handle_service_error
+import schemas
+from services import cover_letter_service
+from models.db.database import get_db
+from api.auth import get_current_active_user
+from utils.api_helpers import handle_service_error
 
 router = APIRouter()
 

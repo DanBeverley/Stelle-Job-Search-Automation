@@ -5,7 +5,8 @@ All environment variables, API keys, and configuration settings are managed here
 import os
 import secrets
 from typing import Optional, List
-from pydantic import BaseSettings, validator
+from pydantic import validator
+from pydantic_settings import BaseSettings
 from functools import lru_cache
 
 

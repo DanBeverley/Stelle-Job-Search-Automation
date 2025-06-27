@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from ..api.auth import get_current_active_user
-from .. import schemas
-from ..models.db.database import get_db
-from ..services import interview_prep_service
-from ..utils.api_helpers import get_user_with_cv_data, validate_non_empty_string
+from api.auth import get_current_active_user
+import schemas
+from models.db.database import get_db
+from services import interview_prep_service
+from utils.api_helpers import get_user_with_cv_data, validate_non_empty_string
 
 router = APIRouter()
 

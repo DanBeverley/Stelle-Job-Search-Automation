@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
-from ..models.db import application as application_model
-from .. import schemas
+from models.db import application as application_model
+import schemas
 
 def get_application_by_id(db: Session, application_id: int, user_id: int):
     return db.query(application_model.Application).filter(

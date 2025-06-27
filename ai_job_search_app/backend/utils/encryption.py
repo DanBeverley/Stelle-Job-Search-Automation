@@ -2,7 +2,7 @@ import base64
 import logging
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
-from ..config.settings import get_settings
+from config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
