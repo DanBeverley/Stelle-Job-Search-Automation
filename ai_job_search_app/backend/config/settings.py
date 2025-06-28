@@ -202,34 +202,8 @@ class Settings(BaseSettings):
         env_file_encoding = "utf-8"
         case_sensitive = False
         
-        # Environment variable mapping
-        fields = {
-            'secret_key': {'env': 'SECRET_KEY'},
-            'encryption_key': {'env': 'ENCRYPTION_KEY'},
-            'database_url': {'env': 'DATABASE_URL'},
-            'log_level': {'env': 'LOG_LEVEL'},
-            'log_file': {'env': 'LOG_FILE'},
-            'environment': {'env': 'ENVIRONMENT'},
-            'debug': {'env': 'DEBUG'},
-            'testing': {'env': 'TESTING'},
-            
-            # External API keys
-            'adzuna_app_id': {'env': 'ADZUNA_APP_ID'},
-            'adzuna_app_key': {'env': 'ADZUNA_APP_KEY'},
-            'theirstack_api_key': {'env': 'THEIRSTACK_API_KEY'},
-            'google_api_key': {'env': 'GOOGLE_API_KEY'},
-            
-            # AWS credentials
-            'aws_access_key_id': {'env': 'AWS_ACCESS_KEY_ID'},
-            'aws_secret_access_key': {'env': 'AWS_SECRET_ACCESS_KEY'},
-            
-            # Email/SMS credentials
-            'smtp_username': {'env': 'SMTP_USERNAME'},
-            'smtp_password': {'env': 'SMTP_PASSWORD'},
-            'twilio_account_sid': {'env': 'TWILIO_ACCOUNT_SID'},
-            'twilio_auth_token': {'env': 'TWILIO_AUTH_TOKEN'},
-            'twilio_phone_number': {'env': 'TWILIO_PHONE_NUMBER'},
-        }
+        # Note: In Pydantic v2, field environment mapping is done using Field annotations
+        # The 'fields' attribute is deprecated and causes warnings
 
     def is_production(self) -> bool:
         """Check if running in production environment."""
