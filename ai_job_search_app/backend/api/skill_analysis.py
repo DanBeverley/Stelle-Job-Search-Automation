@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from .. import schemas
-from ..services import skill_analysis_service
-from ..models.db.database import get_db
-from .auth import get_current_active_user
-from ..utils.api_helpers import get_user_with_cv_data, handle_service_error
+import schemas
+from services import skill_analysis_service
+from models.db.database import get_db
+from api.auth import get_current_active_user
+from utils.api_helpers import get_user_with_cv_data, handle_service_error
 
 router = APIRouter()
 

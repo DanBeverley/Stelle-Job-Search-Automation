@@ -3,8 +3,8 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from peft import PeftModel
 import os
 import logging
-from .. import schemas
-from ..models.db import user as user_model
+import schemas
+from models.db import user as user_model
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +34,9 @@ class CoverLetterGenerator:
 
         try:
             MODEL_ID = "gpt2"  # Updated to use GPT-2 base model
-            # Path to the cover letter checkpoint
-            ADAPTER_PATH = "ai_job_search_app/final_model/checkpoint-420"
+            # Path to the cover letter model (absolute path)
+            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+            ADAPTER_PATH = os.path.join(project_root, 'final_model', 'cover_letter_model')
             CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
 
             if not os.path.exists(ADAPTER_PATH):

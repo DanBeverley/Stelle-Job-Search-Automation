@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from ..api.auth import get_current_active_user
-from .. import schemas
-from ..models.db.database import get_db
-from ..services import interview_prep_service
-from ..utils.api_helpers import get_user_with_cv_data, validate_non_empty_string
+from api.auth import get_current_active_user
+import schemas
+from models.db.database import get_db
+from services.ml_service import MLService
+from services import interview_prep_service
+from utils.api_helpers import get_user_with_cv_data, validate_non_empty_string
 
 router = APIRouter()
 
@@ -44,4 +45,16 @@ def analyze_user_answer(
         
     feedback = interview_prep_service.analyze_answer_with_star(request.answer)
     
-    return schemas.STAResponse(feedback=feedback) 
+    return schemas.STAResponse(feedback=feedback)
+
+@router.post("/generate-response")
+def generate_interview_response(request: dict):
+    """
+    Generate interview response using our working ML service
+    """
+    try:
+        ml_service = MLService()
+        response = ml_service.generate_interview_response(request.get('question', ''))
+        return {'response': response}
+    except Exception as e:
+        return {'error': str(e), 'response': 'Sorry, I could not generate a response at this time.'} 

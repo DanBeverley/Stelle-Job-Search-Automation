@@ -5,7 +5,7 @@ import os
 import logging
 from typing import Dict, Any
 from fastapi import APIRouter, status
-from ..config.settings import get_settings
+from config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

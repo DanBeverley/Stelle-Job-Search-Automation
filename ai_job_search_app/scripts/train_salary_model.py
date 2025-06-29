@@ -6,7 +6,7 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import mean_squared_error
-from datasets import load_dataset, DownloadConfig
+from datasets import load_dataset, DownloadConfig, Dataset
 import joblib
 import os
 import numpy as np
@@ -15,6 +15,16 @@ import re
 import time
 import requests
 import logging
+import json
+
+try:
+    import torch
+    from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments, EarlyStoppingCallback
+    from peft import LoraConfig, get_peft_model, TaskType
+    from trl import SFTTrainer
+    TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    TRANSFORMERS_AVAILABLE = False
 
 # Configure logging
 logging.basicConfig(
@@ -389,5 +399,91 @@ def main():
     joblib.dump(model_pipeline.named_steps['preprocessor'], PREPROCESSOR_FILE)
     logger.info("Model artifacts saved successfully")
 
+def train_transformers_format(output_dir):
+    """Train salary model using transformers format for consistency"""
+    if not TRANSFORMERS_AVAILABLE:
+        logger.error("Transformers not available, using XGBoost format")
+        main()
+        return
+        
+    logger.info("Training salary model in transformers format")
+    
+    # Load data
+    all_datasets = [
+        normalize_linkedin_data(),
+        normalize_classification_data(),
+        normalize_azrai_data()
+    ]
+    combined_df = pd.concat([df for df in all_datasets if not df.empty], ignore_index=True)
+    
+    if combined_df.empty:
+        logger.warning("No real data available, using synthetic data")
+        combined_df = create_synthetic_data()
+    
+    # Convert to text format
+    text_data = []
+    for _, row in combined_df.iterrows():
+        prompt = f"Job: {row['title']}\nLocation: {row['location']}\nDescription: {row['description'][:200]}\nSalary prediction:"
+        response = f"Salary range: ${row['min_salary']:,.0f} - ${row['max_salary']:,.0f}"
+        text_data.append({"text": f"### Human: {prompt}\n\n### Assistant: {response}\n\n### End"})
+    
+    dataset = Dataset.from_list(text_data)
+    split_dataset = dataset.train_test_split(test_size=0.1, seed=42)
+    
+    # Load model
+    MODEL_ID = "gpt2"
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
+    tokenizer.pad_token = tokenizer.eos_token
+    
+    model = AutoModelForCausalLM.from_pretrained(MODEL_ID, torch_dtype=torch.float16, device_map="auto")
+    model.config.use_cache = False
+    
+    # LoRA config
+    lora_config = LoraConfig(
+        r=32, lora_alpha=64, target_modules=["c_attn", "c_proj"],
+        lora_dropout=0.1, bias="none", task_type=TaskType.CAUSAL_LM
+    )
+    model = get_peft_model(model, lora_config)
+    
+    # Training
+    training_args = TrainingArguments(
+        output_dir=output_dir,
+        per_device_train_batch_size=4,
+        gradient_accumulation_steps=8,
+        learning_rate=3e-5,
+        num_train_epochs=5,
+        eval_strategy="steps",
+        eval_steps=100,
+        save_strategy="epoch",
+        fp16=True,
+        report_to="none"
+    )
+    
+    trainer = SFTTrainer(
+        model=model, args=training_args,
+        train_dataset=split_dataset['train'],
+        eval_dataset=split_dataset['test'],
+        tokenizer=tokenizer,
+        dataset_text_field="text",
+        max_seq_length=512
+    )
+    
+    trainer.train()
+    trainer.save_model(output_dir)
+    tokenizer.save_pretrained(output_dir)
+    
+    with open(os.path.join(output_dir, "model_metadata.json"), 'w') as f:
+        json.dump({"model_type": "salary_prediction", "format": "transformers"}, f)
+    
+    logger.info(f"Transformers salary model saved to {output_dir}")
+
 if __name__ == "__main__":
-    main() 
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output_dir", type=str, required=True)
+    parser.add_argument("--format", type=str, choices=["xgboost", "transformers"], default="xgboost")
+    args = parser.parse_args()
+    
+    if args.format == "transformers":
+        train_transformers_format(args.output_dir)
+    else:
+        main() 

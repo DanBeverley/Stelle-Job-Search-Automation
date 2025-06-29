@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status
 from logging import getLogger
 from sqlalchemy.orm import Session
-from .. import schemas
-from ..models.db.database import get_db
-from .auth import get_current_active_user
-from ..services.ml_service import ml_service
-from ..utils.cv_utils import extract_text_from_pdf, extract_text_from_docx
+import schemas
+from models.db.database import get_db
+from api.auth import get_current_active_user
+from services.ml_service import ml_service
+from utils.cv_utils import extract_text_from_pdf, extract_text_from_docx
 import io
 import re
 import spacy
@@ -440,7 +440,7 @@ async def parse_cv(
         # Save the parsed data to the user's profile in the database
         try:
             # Update user's parsed CV data
-            from ..models.db import user as user_model
+            from models.db import user as user_model
             db_user = db.query(user_model.User).filter(user_model.User.id == current_user.id).first()
             if db_user:
                 db_user.parsed_cv_data = parsed_data

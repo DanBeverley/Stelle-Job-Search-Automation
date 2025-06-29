@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, Body
-from .. import schemas
-from ..services import salary_prediction_service
-from .auth import get_current_active_user
-from ..models.db.database import get_db
-from ..utils.api_helpers import get_user_with_cv_data, handle_service_error
+import schemas
+from services.ml_service import MLService
+from api.auth import get_current_active_user
+from models.db.database import get_db
+from utils.api_helpers import handle_service_error
 from sqlalchemy.orm import Session
 
 router = APIRouter()
@@ -33,12 +33,21 @@ def predict_salary(
     combined_description = f"{user_summary}. Required skills: {', '.join(request.skills)}. Candidate skills: {user_skills}."
 
     try:
-        salary_data = salary_prediction_service.predict_salary_with_xgb(
+        # Use our working ML service
+        ml_service = MLService()
+        salary_data = ml_service.predict_salary(
             job_title=request.job_title,
-            location=request.location,
-            job_description=combined_description
+            experience_level=getattr(request, 'experience_level', 'Mid'),
+            location=request.location
         )
-        return schemas.SalaryPredictionResponse(**salary_data)
+        
+        return schemas.SalaryPredictionResponse(
+            predicted_salary=salary_data['predicted_salary'],
+            confidence_score=salary_data['confidence'],
+            currency=salary_data.get('currency', 'USD'),
+            salary_range_min=int(salary_data['predicted_salary'] * 0.9),
+            salary_range_max=int(salary_data['predicted_salary'] * 1.1)
+        )
 
     except Exception as e:
         raise handle_service_error(e, "Salary Prediction") 

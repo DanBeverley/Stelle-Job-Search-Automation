@@ -4,12 +4,12 @@ load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .api import auth, cv_parser, resume_builder, job_search, interview_prep, salary_prediction, application, cover_letter, skill_analysis, health
-from .models.db.database import engine, Base
-from .models.db import user as user_model
-from .models.db import application as application_model
-from .utils.logging_config import setup_logging, get_logger
-from .config.settings import get_settings
+from api import auth, cv_parser, resume_builder, job_search, interview_prep, salary_prediction, application, cover_letter, skill_analysis, health
+from models.db.database import engine, Base
+from models.db import user as user_model
+from models.db import application as application_model
+from utils.logging_config import setup_logging, get_logger
+from config.settings import get_settings
 
 # Initialize settings
 settings = get_settings()

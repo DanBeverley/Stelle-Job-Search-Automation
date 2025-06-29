@@ -26,8 +26,9 @@ class InterviewPrepGenerator:
 
         try:
             MODEL_ID = "gpt2"
-            # Path to the interview checkpoint
-            ADAPTER_PATH = "ai_job_search_app/final_model/checkpoint-1275"
+            # Path to the interview model (absolute path)
+            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+            ADAPTER_PATH = os.path.join(project_root, 'final_model', 'interview_model')
             CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "huggingface", "hub")
 
             if not os.path.exists(ADAPTER_PATH):

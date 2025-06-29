@@ -5,8 +5,8 @@ import logging
 from typing import Optional
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
-from .. import schemas
-from ..models.db import user as user_model
+import schemas
+from models.db import user as user_model
 
 logger = logging.getLogger(__name__)
 
