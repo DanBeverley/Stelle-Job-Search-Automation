@@ -47,11 +47,13 @@ class FullStackManager:
         """Set up environment variables"""
         logger.info("Setting up environment...")
         
-        # Set Python path
+        # Set Python path - Windows uses semicolon as separator
         env = os.environ.copy()
         backend_parent = str(self.backend_path.parent)
+        path_separator = ";" if os.name == 'nt' else ":"
+        
         if 'PYTHONPATH' in env:
-            env['PYTHONPATH'] = f"{backend_parent}:{env['PYTHONPATH']}"
+            env['PYTHONPATH'] = f"{backend_parent}{path_separator}{env['PYTHONPATH']}"
         else:
             env['PYTHONPATH'] = backend_parent
             
@@ -72,12 +74,14 @@ class FullStackManager:
         if not (self.frontend_path / "node_modules").exists():
             logger.info("Installing frontend dependencies...")
             try:
+                npm_cmd = "npm.cmd" if os.name == 'nt' else "npm"
                 subprocess.run(
-                    ["npm", "install"],
+                    [npm_cmd, "install"],
                     cwd=self.frontend_path,
                     check=True,
                     capture_output=True,
-                    text=True
+                    text=True,
+                    shell=os.name == 'nt'
                 )
                 logger.info("✅ Frontend dependencies installed")
                 return True
@@ -124,15 +128,19 @@ class FullStackManager:
         logger.info("Starting frontend server...")
         
         try:
+            # Windows-compatible npm command
+            npm_cmd = "npm.cmd" if os.name == 'nt' else "npm"
+            
             self.frontend_process = subprocess.Popen(
-                ["npm", "start"],
+                [npm_cmd, "start"],
                 cwd=self.frontend_path,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
                 universal_newlines=True,
-                env=dict(os.environ, BROWSER="none")  # Don't auto-open browser
+                env=dict(os.environ, BROWSER="none"),  # Don't auto-open browser
+                shell=os.name == 'nt'  # Use shell on Windows
             )
             
             # Start a thread to read frontend output
