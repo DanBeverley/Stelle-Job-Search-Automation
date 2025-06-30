@@ -88,26 +88,60 @@ oauth2_scheme = HTTPBearer(scheme_name="Bearer")
 
 @router.post("/register", response_model=schemas.User)
 def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    print(f"🔍 REGISTRATION ATTEMPT: {user.email}")
+    
     db_user = crud.get_user_by_email(db, email=user.email)
     if db_user:
+        print(f"❌ Email already exists: {user.email}")
         raise HTTPException(status_code=400, detail="Email already registered")
     
+    print(f"📝 Creating new user: {user.email}")
     hashed_password = get_password_hash(user.password)
+    print(f"🔐 Password hashed successfully")
+    
     new_user = crud.create_user(db=db, user=user, hashed_password=hashed_password)
+    print(f"✅ User created successfully: ID={new_user.id}, Email={new_user.email}")
+    
     return new_user
 
 @router.post("/login", response_model=schemas.Token)
 def login(db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()):
+    print(f"🔍 LOGIN ATTEMPT: {form_data.username}")
+    
     user = crud.get_user_by_email(db, email=form_data.username)
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    print(f"👤 USER FOUND: {user is not None}")
+    
+    if user:
+        print(f"📧 User email: {user.email}")
+        print(f"🔑 User ID: {user.id}")
+        print(f"✅ User active: {user.is_active}")
+        
+        password_valid = verify_password(form_data.password, user.hashed_password)
+        print(f"🔐 Password valid: {password_valid}")
+        
+        if not password_valid:
+            print("❌ Password verification failed")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    else:
+        print("❌ No user found with this email")
+        # Check what users exist
+        all_users = db.query(user_model.User).all()
+        print(f"📊 Total users in DB: {len(all_users)}")
+        for u in all_users:
+            print(f"   - {u.email} (ID: {u.id})")
+        
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    access_token = create_access_token(
-        data={"sub": user.email}
-    )
+    
+    access_token = create_access_token(data={"sub": user.email})
+    print(f"🎫 Token created successfully")
     return {"access_token": access_token, "token_type": "bearer"}
 
 def get_current_user(db: Session = Depends(get_db), credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme)):
@@ -205,4 +239,13 @@ def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db))
     # Remove used token
     del reset_tokens[request.token]
     
-    return {"message": "Password has been reset successfully."} 
+    return {"message": "Password has been reset successfully."}
+
+@router.get("/debug-users")
+def debug_users(db: Session = Depends(get_db)):
+    """Debug endpoint to check users in database"""
+    users = db.query(user_model.User).all()
+    return {
+        "total_users": len(users),
+        "users": [{"id": u.id, "email": u.email, "is_active": u.is_active} for u in users]
+    } 
