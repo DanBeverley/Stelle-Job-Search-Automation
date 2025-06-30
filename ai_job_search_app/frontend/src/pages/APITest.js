@@ -19,7 +19,7 @@ const APITest = () => {
     {
       id: 'salary',
       name: 'Salary Prediction',
-      endpoint: '/api/salary/predict',
+      endpoint: '/api/salary/test',
       method: 'POST',
       body: {
         job_title: 'Software Engineer',
@@ -31,7 +31,7 @@ const APITest = () => {
     {
       id: 'cover_letter',
       name: 'Cover Letter Generation',
-      endpoint: '/api/cover-letter/generate',
+      endpoint: '/api/cover-letter/test',
       method: 'POST',
       body: {
         job_title: 'Software Engineer',
@@ -42,13 +42,14 @@ const APITest = () => {
     },
     {
       id: 'interview',
-      name: 'Interview Response',
-      endpoint: '/api/interview/generate-response',
+      name: 'Interview Questions Generator',
+      endpoint: '/api/interview/test-questions',
       method: 'POST',
       body: {
-        question: 'Tell me about yourself'
+        job_title: 'Software Engineer',
+        company: 'Google'
       },
-      description: 'Test AI interview preparation'
+      description: 'Generate interview questions based on CV skills'
     }
   ];
 
@@ -117,10 +118,10 @@ const APITest = () => {
           </p>
         </motion.div>
 
-        <div className="mb-6">
+        <div className="mb-6 flex justify-center">
           <button
             onClick={runAllTests}
-            className="btn-primary flex items-center space-x-2"
+            className="btn-primary flex items-center space-x-2 px-8 py-3"
             disabled={Object.values(loading).some(Boolean)}
           >
             <Play size={20} />
@@ -137,8 +138,8 @@ const APITest = () => {
               transition={{ delay: index * 0.1 }}
               className="card p-6"
             >
-              <div className="flex items-center justify-between mb-4">
-                <div>
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-4 space-y-3 lg:space-y-0">
+                <div className="flex-1">
                   <h3 className="text-xl font-semibold text-white">{test.name}</h3>
                   <p className="text-gray-400 text-sm">{test.description}</p>
                   <p className="text-gray-500 text-xs font-mono">
@@ -146,7 +147,7 @@ const APITest = () => {
                   </p>
                 </div>
                 
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center justify-end space-x-3">
                   {results[test.id] && (
                     <div className="flex items-center space-x-2">
                       {results[test.id].success ? (
@@ -163,7 +164,7 @@ const APITest = () => {
                   <button
                     onClick={() => runTest(test)}
                     disabled={loading[test.id]}
-                    className="btn-secondary flex items-center space-x-2"
+                    className="btn-secondary flex items-center space-x-2 min-w-[100px] justify-center"
                   >
                     {loading[test.id] ? (
                       <Loader className="animate-spin" size={16} />
