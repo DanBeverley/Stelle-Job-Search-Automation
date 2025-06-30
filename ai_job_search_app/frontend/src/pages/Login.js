@@ -9,6 +9,9 @@ import LoadingSpinner from '../components/ui/LoadingSpinner';
 const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
+  const [forgotPasswordMessage, setForgotPasswordMessage] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -28,6 +31,39 @@ const Login = () => {
       navigate(from, { replace: true });
     }
     setIsLoading(false);
+  };
+
+  const handleForgotPassword = async () => {
+    if (!forgotPasswordEmail) {
+      setForgotPasswordMessage('Please enter your email address');
+      return;
+    }
+
+    try {
+      console.log('Sending forgot password request for:', forgotPasswordEmail);
+      
+      const response = await fetch('http://localhost:8000/api/auth/forgot-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: forgotPasswordEmail }),
+      });
+
+      console.log('Response status:', response.status);
+      
+      const data = await response.json();
+      console.log('Response data:', data);
+      
+      if (response.ok) {
+        setForgotPasswordMessage('If the email exists, a password reset link has been sent.');
+      } else {
+        setForgotPasswordMessage(data.detail || 'Failed to send reset email');
+      }
+    } catch (error) {
+      console.error('Forgot password error:', error);
+      setForgotPasswordMessage('Failed to send reset email. Please try again.');
+    }
   };
 
   return (
@@ -131,9 +167,13 @@ const Login = () => {
               </div>
 
               <div className="text-sm">
-                <a href="#" className="text-primary-400 hover:text-primary-300 transition-colors">
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(true)}
+                  className="text-primary-400 hover:text-primary-300 transition-colors"
+                >
                   Forgot password?
-                </a>
+                </button>
               </div>
             </div>
 
@@ -173,6 +213,66 @@ const Login = () => {
             </div>
           </div>
         </motion.div>
+
+        {/* Forgot Password Modal */}
+        {showForgotPassword && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-gray-800 rounded-lg p-6 w-full max-w-md"
+            >
+              <h3 className="text-lg font-semibold text-white mb-4">Reset Password</h3>
+              <p className="text-gray-300 mb-4">
+                Enter your email address and we'll send you a link to reset your password.
+              </p>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={forgotPasswordEmail}
+                    onChange={(e) => setForgotPasswordEmail(e.target.value)}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter your email"
+                  />
+                </div>
+                
+                {forgotPasswordMessage && (
+                  <div className={`text-sm ${
+                    forgotPasswordMessage.includes('sent') || forgotPasswordMessage.includes('exists')
+                      ? 'text-green-400' 
+                      : 'text-red-400'
+                  }`}>
+                    {forgotPasswordMessage}
+                  </div>
+                )}
+                
+                <div className="flex space-x-4">
+                  <button
+                    onClick={handleForgotPassword}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md transition-colors"
+                  >
+                    Send Reset Link
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowForgotPassword(false);
+                      setForgotPasswordEmail('');
+                      setForgotPasswordMessage('');
+                    }}
+                    className="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 px-4 rounded-md transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
       </div>
     </div>
   );

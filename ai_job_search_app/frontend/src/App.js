@@ -7,6 +7,7 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
+import JobSearch from './pages/JobSearch';
 import APITest from './pages/APITest';
 
 import { AuthProvider } from './contexts/AuthContext';
@@ -29,6 +30,12 @@ function App() {
               <Route path="/dashboard" element={
                 <ProtectedRoute>
                   <Dashboard />
+                </ProtectedRoute>
+              } />
+              
+              <Route path="/job-search" element={
+                <ProtectedRoute>
+                  <JobSearch />
                 </ProtectedRoute>
               } />
             </Routes>
