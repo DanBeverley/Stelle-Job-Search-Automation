@@ -90,4 +90,192 @@ def search_jobs(
     all_jobs.extend([schemas.JobListing(**job) for job in theirstack_jobs_raw])
     logger.info("Job search completed. Returning %d total jobs", len(all_jobs))
     
-    return {"jobs": all_jobs} 
+    return {"jobs": all_jobs}
+
+@router.get("/auto-search", response_model=schemas.JobSearchResult)
+def automated_job_search(
+    request: Request,
+    location: Optional[str] = None,
+    max_jobs: int = 20,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(get_current_active_user)
+):
+    """
+    Automated job search based on user's CV skills and preferences.
+    Searches for jobs matching the user's skills from their uploaded CV.
+    """
+    logger.info("Starting automated job search for user: %s", current_user.email)
+    
+    # Get user with CV data
+    db_user = db.query(user_model.User).filter(user_model.User.id == current_user.id).first()
+    
+    if not db_user or not db_user.parsed_cv_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No CV data found. Please upload your CV first to enable automated job search."
+        )
+    
+    cv_data = db_user.parsed_cv_data
+    skills = cv_data.get('skills', [])
+    
+    if not skills:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No skills found in your CV. Please update your CV with relevant skills."
+        )
+    
+    # Determine location
+    final_location = location
+    if not final_location:
+        if db_user.city and db_user.country:
+            final_location = f"{db_user.city}, {db_user.country}"
+        else:
+            client_ip = request.client.host
+            geo_location = get_location_from_ip(client_ip)
+            if geo_location and geo_location.get("city"):
+                final_location = f"{geo_location['city']}, {geo_location['country']}"
+    
+    if not final_location:
+        final_location = "Remote"  # Default fallback
+    
+    logger.info("Automated search for skills: %s in location: %s", skills[:3], final_location)
+    
+    all_jobs = []
+    search_count = 0
+    
+    # Search with top skills from CV
+    for skill in skills[:5]:  # Use top 5 skills to avoid too many API calls
+        if search_count >= 3:  # Limit to prevent API rate limiting
+            break
+            
+        try:
+            # Search with individual skills
+            adzuna_jobs = adzuna_api.search_adzuna_jobs(skill, final_location)
+            theirstack_jobs = theirstack_api.search_theirstack_jobs(skill, final_location)
+            
+            # Convert to schema objects
+            skill_jobs = []
+            skill_jobs.extend([schemas.JobListing(**job) for job in adzuna_jobs])
+            skill_jobs.extend([schemas.JobListing(**job) for job in theirstack_jobs])
+            
+            # Add skill relevance info
+            for job in skill_jobs:
+                job.description = f"[Matched skill: {skill}] {job.description}"
+            
+            all_jobs.extend(skill_jobs)
+            search_count += 1
+            
+            logger.info("Found %d jobs for skill: %s", len(skill_jobs), skill)
+            
+        except Exception as e:
+            logger.error("Search failed for skill %s: %s", skill, str(e))
+            continue
+    
+    # Remove duplicates based on title and company
+    seen = set()
+    unique_jobs = []
+    for job in all_jobs:
+        key = (job.title.lower(), job.company.lower())
+        if key not in seen:
+            seen.add(key)
+            unique_jobs.append(job)
+    
+    # Limit results
+    unique_jobs = unique_jobs[:max_jobs]
+    
+    logger.info("Automated job search completed. Found %d unique jobs", len(unique_jobs))
+    
+    return {"jobs": unique_jobs}
+
+@router.post("/save-search")
+def save_job_search_preferences(
+    preferences: dict,
+    db: Session = Depends(get_db),
+    current_user: schemas.User = Depends(get_current_active_user)
+):
+    """
+    Save user's job search preferences for automation.
+    """
+    db_user = db.query(user_model.User).filter(user_model.User.id == current_user.id).first()
+    
+    # Store preferences in user data (could extend user model)
+    # For now, store in parsed_cv_data as job_preferences
+    if not db_user.parsed_cv_data:
+        db_user.parsed_cv_data = {}
+    
+    db_user.parsed_cv_data['job_preferences'] = preferences
+    db.commit()
+    
+    return {"message": "Job search preferences saved successfully"}
+
+@router.get("/test-auto-search")
+def test_automated_job_search(location: Optional[str] = "Remote"):
+    """
+    Test endpoint for automated job search without authentication.
+    For testing purposes only.
+    """
+    try:
+        # Mock CV skills for testing
+        mock_skills = ["Python", "JavaScript", "React", "FastAPI", "Machine Learning"]
+        
+        logger.info("Testing automated search for skills: %s in location: %s", mock_skills[:3], location)
+        
+        all_jobs = []
+        search_count = 0
+        
+        # Search with mock skills
+        for skill in mock_skills[:3]:  # Use top 3 skills for testing
+            if search_count >= 2:  # Limit to prevent API rate limiting
+                break
+                
+            try:
+                # Search with individual skills
+                adzuna_jobs = adzuna_api.search_adzuna_jobs(skill, location)
+                theirstack_jobs = theirstack_api.search_theirstack_jobs(skill, location)
+                
+                # Convert to schema objects
+                skill_jobs = []
+                for job in adzuna_jobs:
+                    job_obj = schemas.JobListing(**job)
+                    job_obj.description = f"[Matched skill: {skill}] {job_obj.description[:200]}..."
+                    skill_jobs.append(job_obj)
+                
+                for job in theirstack_jobs:
+                    job_obj = schemas.JobListing(**job)
+                    job_obj.description = f"[Matched skill: {skill}] {job_obj.description[:200]}..."
+                    skill_jobs.append(job_obj)
+                
+                all_jobs.extend(skill_jobs)
+                search_count += 1
+                
+                logger.info("Found %d jobs for skill: %s", len(skill_jobs), skill)
+                
+            except Exception as e:
+                logger.error("Search failed for skill %s: %s", skill, str(e))
+                continue
+        
+        # Remove duplicates
+        seen = set()
+        unique_jobs = []
+        for job in all_jobs:
+            key = (job.title.lower(), job.company.lower())
+            if key not in seen:
+                seen.add(key)
+                unique_jobs.append(job)
+        
+        # Limit results
+        unique_jobs = unique_jobs[:15]
+        
+        return {
+            "jobs": unique_jobs,
+            "skills_searched": mock_skills[:search_count],
+            "total_found": len(unique_jobs),
+            "status": "success"
+        }
+        
+    except Exception as e:
+        return {
+            "jobs": [],
+            "error": str(e),
+            "status": "error"
+        } 
