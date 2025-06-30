@@ -40,9 +40,9 @@ const Login = () => {
     }
 
     try {
-      console.log('Sending forgot password request for:', forgotPasswordEmail);
+      console.log('🔍 Sending forgot password request for:', forgotPasswordEmail);
       
-      const response = await fetch('http://localhost:8000/api/auth/forgot-password', {
+      const response = await fetch('/api/auth/forgot-password', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -50,18 +50,21 @@ const Login = () => {
         body: JSON.stringify({ email: forgotPasswordEmail }),
       });
 
-      console.log('Response status:', response.status);
+      console.log('📡 Forgot password response status:', response.status);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('❌ Forgot password failed:', errorData);
+        setForgotPasswordMessage(errorData.detail || 'Failed to send reset email');
+        return;
+      }
       
       const data = await response.json();
-      console.log('Response data:', data);
+      console.log('✅ Forgot password successful:', data);
       
-      if (response.ok) {
-        setForgotPasswordMessage('If the email exists, a password reset link has been sent.');
-      } else {
-        setForgotPasswordMessage(data.detail || 'Failed to send reset email');
-      }
+      setForgotPasswordMessage('If the email exists, a password reset link has been sent.');
     } catch (error) {
-      console.error('Forgot password error:', error);
+      console.error('❌ Forgot password error:', error);
       setForgotPasswordMessage('Failed to send reset email. Please try again.');
     }
   };

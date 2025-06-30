@@ -8,6 +8,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import JobSearch from './pages/JobSearch';
+import AuthTest from './pages/AuthTest';
 import APITest from './pages/APITest';
 
 import { AuthProvider } from './contexts/AuthContext';
@@ -25,6 +26,7 @@ function App() {
               <Route path="/" element={<Home />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/auth-test" element={<AuthTest />} />
               <Route path="/api-test" element={<APITest />} />
               
               <Route path="/dashboard" element={
