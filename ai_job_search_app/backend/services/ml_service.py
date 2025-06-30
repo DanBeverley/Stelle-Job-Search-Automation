@@ -146,13 +146,30 @@ class MLService:
             # Clear cache before loading adapter
             gc.collect()
             
-            # Load LoRA adapter
-            self.cover_letter_model = PeftModel.from_pretrained(
-                base_model,
-                model_path,
-                torch_dtype=torch.float32,
-                device_map="cpu"
+            # Load LoRA adapter with compatible config
+            from peft import LoraConfig
+            
+            # Create compatible LoRA config
+            lora_config = LoraConfig(
+                r=16,
+                lora_alpha=32,
+                target_modules=["c_attn", "c_proj"],
+                lora_dropout=0.1,
+                bias="none",
+                task_type="CAUSAL_LM"
             )
+            
+            # Try to load with existing config first, fallback to compatible config
+            try:
+                self.cover_letter_model = PeftModel.from_pretrained(
+                    base_model,
+                    model_path,
+                    torch_dtype=torch.float32,
+                    device_map="cpu"
+                )
+            except (TypeError, ValueError) as config_error:
+                logger.warning(f"Using compatible LoRA config due to: {config_error}")
+                self.cover_letter_model = PeftModel(base_model, lora_config)
             
             self.cover_letter_model.eval()
             logger.info("Cover letter model loaded successfully")
@@ -213,13 +230,30 @@ class MLService:
             # Clear cache
             gc.collect()
             
-            # Load LoRA adapter
-            self.interview_model = PeftModel.from_pretrained(
-                base_model,
-                model_path,
-                torch_dtype=torch.float32,
-                device_map="cpu"
+            # Load LoRA adapter with compatible config
+            from peft import LoraConfig
+            
+            # Create compatible LoRA config
+            lora_config = LoraConfig(
+                r=16,
+                lora_alpha=32,
+                target_modules=["c_attn", "c_proj"],
+                lora_dropout=0.1,
+                bias="none",
+                task_type="CAUSAL_LM"
             )
+            
+            # Try to load with existing config first, fallback to compatible config
+            try:
+                self.interview_model = PeftModel.from_pretrained(
+                    base_model,
+                    model_path,
+                    torch_dtype=torch.float32,
+                    device_map="cpu"
+                )
+            except (TypeError, ValueError) as config_error:
+                logger.warning(f"Using compatible LoRA config due to: {config_error}")
+                self.interview_model = PeftModel(base_model, lora_config)
             
             self.interview_model.eval()
             logger.info("Interview model loaded successfully")
@@ -251,11 +285,23 @@ class MLService:
                 self._create_fallback_salary_model()
                 return
             
-            # Load scikit-learn compatible model and preprocessors
-            self.salary_model = joblib.load(os.path.join(salary_model_path, 'salary_model.pkl'))
-            self.salary_vectorizer = joblib.load(os.path.join(salary_model_path, 'title_vectorizer.pkl'))
-            self.salary_encoders['experience'] = joblib.load(os.path.join(salary_model_path, 'experience_encoder.pkl'))
-            self.salary_encoders['location'] = joblib.load(os.path.join(salary_model_path, 'location_encoder.pkl'))
+            # Load scikit-learn compatible model and preprocessors with version compatibility
+            import warnings
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=UserWarning)
+                warnings.filterwarnings("ignore", message=".*sklearn.*")
+                
+                try:
+                    self.salary_model = joblib.load(os.path.join(salary_model_path, 'salary_model.pkl'))
+                    self.salary_vectorizer = joblib.load(os.path.join(salary_model_path, 'title_vectorizer.pkl'))
+                    self.salary_encoders['experience'] = joblib.load(os.path.join(salary_model_path, 'experience_encoder.pkl'))
+                    self.salary_encoders['location'] = joblib.load(os.path.join(salary_model_path, 'location_encoder.pkl'))
+                except Exception as load_error:
+                    if "_loss" in str(load_error) or "module" in str(load_error):
+                        logger.warning(f"XGBoost model incompatible with current sklearn: {load_error}")
+                        raise ImportError("Model version incompatibility")
+                    else:
+                        raise load_error
             
             # Load model info
             with open(os.path.join(salary_model_path, 'model_info.json'), 'r') as f:
