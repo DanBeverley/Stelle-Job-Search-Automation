@@ -1,5 +1,4 @@
 from sqlalchemy import Boolean, Column, Integer, String, Text, ForeignKey
-from sqlalchemy.orm import relationship
 from .database import Base
 
 class Application(Base):
@@ -13,5 +12,4 @@ class Application(Base):
     notes = Column(Text, nullable=True)
     cover_letter_text = Column(Text, nullable=True)
     
-    user_id = Column(Integer, ForeignKey("users.id"))
-    owner = relationship("User", back_populates="applications") 
+    user_id = Column(Integer, ForeignKey("users.id")) 

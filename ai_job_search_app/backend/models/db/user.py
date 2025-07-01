@@ -1,5 +1,4 @@
 from sqlalchemy import Boolean, Column, Integer, String, Text, JSON
-from sqlalchemy.orm import relationship
 from .database import Base
 
 class User(Base):
@@ -12,6 +11,4 @@ class User(Base):
     encrypted_resume_data = Column(Text, nullable=True)
     city = Column(String, nullable=True)
     country = Column(String, nullable=True) 
-    parsed_cv_data = Column(JSON, nullable=True)
-
-    applications = relationship("Application", back_populates="owner") 
+    parsed_cv_data = Column(JSON, nullable=True) 

@@ -197,13 +197,12 @@ class Settings(BaseSettings):
     # =============================================================================
     # CONFIGURATION LOADING
     # =============================================================================
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
-        
-        # Note: In Pydantic v2, field environment mapping is done using Field annotations
-        # The 'fields' attribute is deprecated and causes warnings
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "case_sensitive": False,
+        "protected_namespaces": ('settings_',)  # Fix model_ field warnings
+    }
 
     def is_production(self) -> bool:
         """Check if running in production environment."""

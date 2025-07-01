@@ -27,6 +27,7 @@ const Navbar = () => {
 
   const navItems = [
     { name: 'Home', path: '/', icon: Home },
+    { name: 'API Test', path: '/api-test', icon: Settings },
     { name: 'Dashboard', path: '/dashboard', icon: Settings, protected: true },
     { name: 'CV Upload', path: '/cv-upload', icon: Upload, protected: true },
     { name: 'Job Search', path: '/job-search', icon: Search, protected: true },
